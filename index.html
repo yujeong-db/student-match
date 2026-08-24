@@ -129,6 +129,9 @@
   .random-section { margin-top: 16px; }
   .random-teacher-block { margin-bottom: 12px; padding: 12px; background: var(--blue-light); border-radius: 8px; border: 1px solid var(--blue-border); }
   .random-teacher-name { font-weight: 700; color: var(--orange-dark); margin-bottom: 6px; }
+  tr.manually-added-row { outline: 3px solid var(--red); outline-offset: -2px; }
+  tr.manually-added-row td { background: var(--red-light); }
+  .assign-pick-cell.selected { outline: 3px solid var(--orange); background: var(--orange) !important; color: #fff !important; }
 </style>
 </head>
 <body>
@@ -1576,8 +1579,21 @@ function teacherColorStyle(teacherName, colorMap) {
   if (!colorMap.has(teacherName)) colorMap.set(teacherName, colorMap.size % TEACHER_COLOR_PALETTE.length);
   return TEACHER_COLOR_PALETTE[colorMap.get(teacherName)];
 }
-// 회원의 "매칭 가능 교사 및 시간" 칸 HTML. 교사가 다르면 다른 색 박스로 구분됨(cap=0이면 전체 표시).
-function renderTeacherSlotsHtml(r, cap) {
+// onclick 속성 등 JS 문자열 리터럴 안에 안전하게 넣기 위한 이스케이프
+function jsStr(v) {
+  return String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// 회원의 "매칭 가능 교사 및 시간" 칸 HTML. 교사(탭) 하나당 박스 하나로 묶어서 그 안에 가능한
+// 요일/시간을 모두 나열한다(교사가 다르면 다른 색 박스로 구분). 적게 찬 방(인원수 적은 슬롯)부터
+// 위로 오도록 박스/시간 모두 인원수 오름차순 정렬.
+// opts: { cap: 표시할 교사 박스 최대 개수(0/생략=전체), collapseTimes: 시간이 3개 이상이면 첫 시간만
+//         보여주고 화살표로 펼치기, clickable: 박스를 클릭하면 시간 선택 캘린더(추가 배정용)를 염 }
+function renderTeacherSlotsHtml(r, opts) {
+  opts = opts || {};
+  const cap = opts.cap;
+  const collapseTimes = !!opts.collapseTimes;
+  const clickable = !!opts.clickable;
   const m = r.member;
   const matches = r.matches.filter(mt => mt.hasSlots);
   if (m.videoRefused) {
@@ -1588,28 +1604,59 @@ function renderTeacherSlotsHtml(r, cap) {
         : '<span class="badge badge-red">레벨 매칭 없음</span>');
   }
   if (matches.length === 0) return '<span class="badge badge-red">매칭 없음</span>';
-  const allSlots = [];
-  matches.forEach(mt => {
-    (cap ? mt.availableSlots.slice(0, 3) : mt.availableSlots).forEach(sl => {
-      allSlots.push({ teacher: mt.teacher.teacherName, tab: mt.teacher.tabName, ...sl });
-    });
-  });
-  const display = cap ? allSlots.slice(0, cap) : allSlots;
+
+  // 교사(박스) 하나당 슬롯을 인원수 오름차순으로 정렬하고, 박스 자체도 최소 인원수 기준 오름차순 정렬
+  const grouped = matches.map(mt => {
+    const slots = mt.availableSlots.slice().sort((a, b) => a.currentCount - b.currentCount);
+    return { mt, slots, minCount: slots[0].currentCount };
+  }).sort((a, b) => a.minCount - b.minCount);
+
+  const display = cap ? grouped.slice(0, cap) : grouped;
   const colorMap = new Map();
-  let html = '<div class="slot-list">' + display.map(sl => {
-    const c = teacherColorStyle(sl.teacher, colorMap);
-    const warn = sl.currentCount >= 7;
+  let html = '<div class="slot-list">' + display.map(({ mt, slots }) => {
+    const c = teacherColorStyle(mt.teacher.teacherName, colorMap);
+    const warn = slots.some(s => s.currentCount >= 7);
     const style = `background:${c.bg};border:${warn ? '2px' : '1px'} solid ${c.border};color:${c.text};` + (warn ? 'box-shadow:0 0 0 1px var(--yellow);' : '');
-    const weekTag = sl.assignedWeek ? `<span class="badge badge-blue">${sl.assignedWeek}</span> ` : '';
-    return `<div class="slot-item" style="${style}">
-      <strong>${sl.teacher}</strong>
-      <span>${sl.day} ${sl.time}</span>
-      ${weekTag}<span class="badge badge-gray">${sl.currentCount}/8명</span>
+    const timesTexts = slots.map(sl => `${sl.day}${sl.time}${sl.assignedWeek ? `(${sl.assignedWeek[0]})` : ''} ${sl.currentCount}/8명`);
+
+    let timesHtml;
+    if (collapseTimes && timesTexts.length >= 3) {
+      const moreLabel = `▼ 외 ${timesTexts.length - 1}개`;
+      timesHtml = `<div style="font-size:11px">
+        <span class="times-short">${timesTexts[0]}</span>
+        <span class="times-full" style="display:none">${timesTexts.join(' / ')}</span>
+        <button type="button" class="times-toggle-btn" data-more="${moreLabel}" onclick="event.stopPropagation();toggleTimesBox(this)" style="border:none;background:none;cursor:pointer;font-size:11px;color:inherit;text-decoration:underline;padding:0;margin-left:4px">${moreLabel}</button>
+      </div>`;
+    } else {
+      timesHtml = `<div style="font-size:11px">${timesTexts.join(' / ')}</div>`;
+    }
+
+    const clickHandler = clickable ? ` onclick="openAssignPickerModal('${jsStr(r.member.cas)}','${jsStr(mt.teacher.tabName)}')" style="${style};cursor:pointer"` : ` style="${style}"`;
+    return `<div class="slot-item"${clickHandler}>
+      <strong>${mt.teacher.teacherName}${clickable ? ' 📅' : ''}</strong>
+      ${timesHtml}
     </div>`;
   }).join('');
-  if (cap && allSlots.length > cap) html += `<div style="font-size:11px;color:var(--text-muted)">+${allSlots.length-cap}개 더...</div>`;
+  if (cap && grouped.length > cap) html += `<div style="font-size:11px;color:var(--text-muted)">+${grouped.length-cap}명 교사 더...</div>`;
   html += '</div>';
   return html;
+}
+// 3개 이상 시간을 첫 시간만 보이게 접어둔 박스를 펼치거나 다시 접기
+function toggleTimesBox(btn) {
+  const wrap = btn.parentElement;
+  const shortEl = wrap.querySelector('.times-short');
+  const fullEl = wrap.querySelector('.times-full');
+  if (!shortEl || !fullEl) return;
+  const expanded = fullEl.style.display !== 'none';
+  if (expanded) {
+    fullEl.style.display = 'none';
+    shortEl.style.display = '';
+    btn.textContent = btn.dataset.more;
+  } else {
+    fullEl.style.display = '';
+    shortEl.style.display = 'none';
+    btn.textContent = '▲ 접기';
+  }
 }
 
 function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
@@ -1638,7 +1685,7 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
 
   filtered.forEach((r, idx) => {
     const m = r.member;
-    const slotsHtml = renderTeacherSlotsHtml(r, 6);
+    const slotsHtml = renderTeacherSlotsHtml(r, { cap: 6 });
 
     // 형제 정보
     const broHtml = getBroHtml(m);
@@ -1778,10 +1825,8 @@ function buildSlotGridHtml(teacher, mt, excludeKey) {
 // 임의배정결과/교사별 보기 표에서 "교사 가능시간" 칸에 들어가는 버튼
 // excludeKey를 주면(임의배정결과에서 사용) 이미 배정된 시간은 강조에서 제외한 "그 외 가능시간" 모달을 연다
 function slotModalButton(cas, tabName, label, excludeKey) {
-  const safeTab = String(tabName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const safeCas = String(cas).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const exArg = excludeKey ? `,'${String(excludeKey).replace(/'/g, "\\'")}'` : '';
-  return `<button class="btn btn-gray" style="padding:3px 10px;font-size:11px" onclick="openSlotModal('${safeCas}','${safeTab}'${exArg})">${label || '📅 시간표 보기'}</button>`;
+  const exArg = excludeKey ? `,'${jsStr(excludeKey)}'` : '';
+  return `<button class="btn btn-gray" style="padding:3px 10px;font-size:11px" onclick="openSlotModal('${jsStr(cas)}','${jsStr(tabName)}'${exArg})">${label || '📅 시간표 보기'}</button>`;
 }
 function openSlotModal(cas, tabName, excludeKey) {
   const r = matchResults.find(x => x.member.cas === cas);
@@ -1799,6 +1844,7 @@ function openSlotModal(cas, tabName, excludeKey) {
 }
 function closeSlotModal() {
   document.getElementById('slotModalOverlay').classList.remove('show');
+  pendingAssignSelection = null;
 }
 
 // 버튼을 누르지 않아도 바로 보이는 간략 가능 시간 텍스트. 예: "월7:00/월7:30/화3:00"
@@ -1949,14 +1995,24 @@ function randomAssign() {
   // (완전히 매칭 불가능한 회원은 요약의 "매칭 어려움" 목록에 별도로 표시되므로 여기서는 제외)
   const additionalCandidates = matchResults.filter(r => !used.has(r.member.cas) && r.matches.some(mt => mt.hasSlots));
 
-  // 엑셀 다운로드용으로 결과 저장
+  // 엑셀 다운로드 + 화면 재렌더링(수동 추가 배정 반영 등)용으로 결과 저장
   lastRandomAssign = { targets, perTeacher, unassigned: additionalCandidates };
 
-  // 렌더링
+  renderRandomAssignResultUI();
+  const el = document.getElementById('randomAssignResult');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+// randomAssign() 실행 직후 뿐 아니라, 캘린더에서 회원을 수동으로 "추가"했을 때도
+// lastRandomAssign을 기준으로 다시 그릴 수 있도록 렌더링 로직을 분리함.
+function renderRandomAssignResultUI() {
+  if (!lastRandomAssign) return;
+  const { perTeacher, unassigned: additionalCandidates } = lastRandomAssign;
+
   const el = document.getElementById('randomAssignResult');
   if (!el) return;
   let html = `<div class='section-title'>🎲 임의 배정 결과 (교사별 설정 인원 기준)</div>`;
-  html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🔶 표시는 마감임박(7/8) 자리를 채우는 우선 배정 회원입니다. "배정시간"은 매칭된 시간 중 가장 이른 시간으로 자동 선택되었습니다.</div>`;
+  html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🔶 표시는 마감임박(7/8) 자리를 채우는 우선 배정 회원입니다. "배정시간"은 매칭된 시간 중 가장 이른 시간으로 자동 선택되었습니다. <span class="badge badge-red">굵은 빨간 테두리</span>는 추가 배정 가능 회원 목록에서 직접 추가한 회원입니다.</div>`;
   Object.values(perTeacher).forEach(({ teacher, picked }) => {
     if (picked.length === 0) return;
     html += `<div class='random-teacher-block'>`
@@ -1976,8 +2032,10 @@ function randomAssign() {
       const excludeKey = assignedSlot ? `${assignedSlot.day}-${assignedSlot.time}` : '';
       const otherTimesBtn = m.videoRefused ? '-' : (mt ? slotModalButton(m.cas, teacher.tabName, '📅 그 외 가능시간', excludeKey) : '-');
       const exactFitTag = r._exactFitPicked ? ` <span class="badge badge-yellow">🔶마감임박</span>` : '';
+      const manualTag = r._manuallyAdded ? ` <span class="badge badge-red">🆕 추가배정</span>` : '';
       const levelText = m.displayLevel || m.level || '-';
-      html += `<tr><td>${i+1}</td><td><code>${m.cas}</code>${exactFitTag}</td>`
+      const rowClass = r._manuallyAdded ? ' class="manually-added-row"' : '';
+      html += `<tr${rowClass}><td>${i+1}</td><td><code>${m.cas}</code>${exactFitTag}${manualTag}</td>`
         + `<td style="width:60px">${levelText}</td>`
         + `<td style="white-space:nowrap;font-size:12px">${firstWeekCell(m)}</td>`
         + `<td style="width:90px">${cycleText}</td>`
@@ -1992,6 +2050,7 @@ function randomAssign() {
   // 추가 배정 가능 회원 목록 (배정 가능한 교사/시간이 있지만 이번 라운드에서 뽑히지 않은 회원)
   if (additionalCandidates.length > 0) {
     html += `<div class='section-title' style='margin-top:16px'>🙋 추가 배정 가능 회원 (${additionalCandidates.length}명)</div>`;
+    html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">매칭 가능 교사 및 시간 박스를 클릭하면 캘린더에서 원하는 시간을 골라 임의 배정 결과에 바로 추가할 수 있습니다.</div>`;
     html += '<div style="overflow-x:auto"><table style="font-size:12px;width:auto">'
       + '<thead><tr><th>#</th><th>CAS</th><th>레벨</th><th>수업주차</th><th>가능일정</th><th>매칭 가능 교사 및 시간</th><th>특이사항</th></tr></thead><tbody>';
     additionalCandidates.forEach((r, i) => {
@@ -2000,7 +2059,7 @@ function randomAssign() {
         + `<td style="width:60px">${m.displayLevel || m.level || '-'}</td>`
         + `<td style="white-space:nowrap;font-size:12px">${firstWeekCell(m)}</td>`
         + `<td style="max-width:150px;font-size:12px">${m.possibleScheduleRaw||'-'}</td>`
-        + `<td style="min-width:200px">${renderTeacherSlotsHtml(r, 0)}</td>`
+        + `<td style="min-width:200px">${renderTeacherSlotsHtml(r, { cap: 0, collapseTimes: true, clickable: true })}</td>`
         + `<td style="max-width:220px;font-size:12px">${m.note||'-'}</td></tr>`;
     });
     html += '</tbody></table></div>';
@@ -2008,7 +2067,92 @@ function randomAssign() {
 
   el.innerHTML = html;
   el.style.display = 'block';
-  el.scrollIntoView({ behavior:'smooth' });
+}
+
+// ========== 추가 배정 가능 회원 → 캘린더에서 시간 선택해 임의 배정 결과에 수동 추가 ==========
+let pendingAssignSelection = null;
+// 캘린더에서 회원×교사 조합의 시간 선택 UI(클릭해서 선택 → 우측 하단 "추가" 버튼)
+function buildAssignPickerHtml(cas, tabName, teacher, mt) {
+  const matchByKey = {};
+  (mt.availableSlots || []).forEach(sl => { matchByKey[`${sl.day}-${sl.time}`] = sl; });
+  const earliestKey = findEarliestSlotKey(mt.availableSlots);
+
+  let html = '<div style="overflow-x:auto"><table style="font-size:12px;border-collapse:collapse;width:100%">';
+  html += '<thead><tr><th style="padding:6px">시간</th>' + DAYS_ORDER.map(d => `<th style="padding:6px">${d}</th>`).join('') + '</tr></thead><tbody>';
+  TIME_SLOTS.forEach(time => {
+    html += `<tr><td style="font-weight:700;white-space:nowrap;padding:6px 8px">${time}</td>`;
+    DAYS_ORDER.forEach(day => {
+      const key = `${day}-${time}`;
+      const sl = matchByKey[key];
+      if (sl) {
+        const star = key === earliestKey ? '⭐ ' : '';
+        html += `<td class="assign-pick-cell" style="background:var(--red-light);border:2px solid var(--red);border-radius:6px;padding:6px;text-align:center;color:var(--red);font-weight:700;white-space:nowrap;cursor:pointer" onclick="selectAssignSlot(this,'${jsStr(cas)}','${jsStr(tabName)}','${jsStr(day)}','${jsStr(time)}')">${star}${matchSlotLabel(sl)}</td>`;
+      } else {
+        const tslot = teacher.availableSlots.find(s => s.day === day && s.time === time);
+        html += `<td style="padding:6px;text-align:center;color:var(--text-muted);white-space:nowrap">${teacherSlotLabel(tslot)}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:10px;font-size:12px;color:var(--text-muted)">🔴 빨간 테두리 = 배정 가능한 시간(클릭해서 선택) · ⭐ = 가장 이른 추천 시간</div>';
+  html += `<div style="display:flex;justify-content:flex-end;margin-top:12px">
+    <button class="btn btn-primary" id="assignPickBtn" disabled onclick="confirmAssignPick()">➕ 추가</button>
+  </div>`;
+  return html;
+}
+function selectAssignSlot(td, cas, tabName, day, time) {
+  const table = td.closest('table');
+  if (table) table.querySelectorAll('.assign-pick-cell.selected').forEach(el => el.classList.remove('selected'));
+  td.classList.add('selected');
+  pendingAssignSelection = { cas, tabName, day, time };
+  const btn = document.getElementById('assignPickBtn');
+  if (btn) btn.disabled = false;
+}
+function confirmAssignPick() {
+  if (!pendingAssignSelection) return;
+  const { cas, tabName, day, time } = pendingAssignSelection;
+  assignMemberManually(cas, tabName, day, time);
+  pendingAssignSelection = null;
+}
+// "추가 배정 가능 회원" 목록에서 매칭 가능 교사 박스를 클릭하면 여는 시간 선택 모달
+function openAssignPickerModal(cas, tabName) {
+  if (!lastRandomAssign) { alert('먼저 🎲 임의 배정을 실행하세요.'); return; }
+  const r = matchResults.find(x => x.member.cas === cas);
+  if (!r) return;
+  const mt = r.matches.find(m => m.teacher.tabName === tabName && m.hasSlots);
+  if (!mt) return;
+  pendingAssignSelection = null;
+  document.getElementById('slotModalTitle').textContent = `👩‍🏫 ${mt.teacher.teacherName} (${mt.teacher.tabName}) — 회원 ${r.member.cas} 시간 선택 후 추가`;
+  const body = document.getElementById('slotModalBody');
+  if (mt.videoRefused) {
+    body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">화상코칭거부 회원은 시간과 무관하게 레벨만으로 매칭됩니다. 시간 선택 없이 바로 추가할 수 있습니다.</div>'
+      + `<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-primary" onclick="assignMemberManually('${jsStr(cas)}','${jsStr(tabName)}',null,null)">➕ 추가</button></div>`;
+  } else {
+    body.innerHTML = buildAssignPickerHtml(cas, tabName, mt.teacher, mt);
+  }
+  document.getElementById('slotModalOverlay').classList.add('show');
+}
+// 선택한 시간으로 회원을 임의 배정 결과에 수동 추가 (교사별 설정 인원 캡과 무관하게 강제 추가)
+function assignMemberManually(cas, tabName, day, time) {
+  if (!lastRandomAssign) return;
+  const r = matchResults.find(x => x.member.cas === cas);
+  if (!r) return;
+  const mt = r.matches.find(m2 => m2.teacher.tabName === tabName && m2.hasSlots);
+  if (!mt) return;
+  let slot = null;
+  if (day && time) {
+    slot = mt.availableSlots.find(sl => sl.day === day && sl.time === time);
+    if (!slot) return;
+  }
+  r._assignedSlot = slot;
+  r._manuallyAdded = true;
+  const bucket = lastRandomAssign.perTeacher[tabName];
+  if (!bucket) return;
+  if (!bucket.picked.some(p => p.member.cas === cas)) bucket.picked.push(r);
+  lastRandomAssign.unassigned = lastRandomAssign.unassigned.filter(x => x.member.cas !== cas);
+  closeSlotModal();
+  renderRandomAssignResultUI();
 }
 
 // ========== 탭 전환 ==========
