@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>회원 배정 도우미</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/moonspam/NanumSquareNeo@1.0/nanumsquareneo.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  :root {
+    --blue: #ea580c; --blue-light: #fff7ed; --blue-border: #fed7aa;
+    --green: #16a34a; --green-light: #f0fdf4; --green-border: #bbf7d0;
+    --yellow: #d97706; --yellow-light: #fffbeb; --yellow-border: #fde68a;
+    --red: #dc2626; --red-light: #fef2f2; --red-border: #fecaca;
+    --gray: #6b7280; --gray-light: #f9fafb; --gray-border: #e5e7eb;
+    --text: #1c1008; --text-sub: #3d2b17; --text-muted: #92674a;
+    --orange: #ea580c; --orange-dark: #c2410c; --orange-mid: #fb923c;
+    --bg: #fff9f5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'NanumSquareNeo', 'Malgun Gothic', '맑은 고딕', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 22px; font-weight: 800; color: var(--orange); margin-bottom: 4px; }
+  h2 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+  .subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
+  .card { background: #fff; border: 1px solid #fddcb5; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(234,88,12,.06); }
+  .upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .mode-selector { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 14px; background: var(--blue-light); border-radius: 8px; border: 1px solid var(--blue-border); }
+  .mode-label { font-weight: 700; font-size: 13px; color: var(--orange-dark); }
+  .mode-select { border: 2px solid var(--blue-border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; font-family: inherit; background: #fff; color: var(--text); cursor: pointer; outline: none; transition: border-color .2s; }
+  .mode-select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px #fff0e6; }
+  .mode-select.selected { border-color: var(--orange); color: var(--orange); }
+  .mode-hint { font-size: 12px; color: var(--text-muted); margin-left: 4px; }
+  .upload-box { border: 2px dashed var(--orange-mid); border-radius: 10px; padding: 24px 20px; text-align: center; cursor: pointer; transition: all .2s; background: var(--blue-light); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 140px; user-select: none; }
+  .upload-box:hover { border-color: var(--orange); background: #ffe8d6; }
+  .upload-box.loaded { border-color: var(--green); background: var(--green-light); border-style: solid; }
+  .upload-box.error { border-color: var(--red); background: var(--red-light); border-style: solid; }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-label { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .upload-hint { color: var(--text-muted); font-size: 12px; }
+  .upload-status { margin-top: 8px; font-size: 12px; font-weight: 600; }
+  .upload-status.ok { color: var(--green); }
+  .upload-status.err { color: var(--red); }
+  input[type="file"] { display: none; }
+  textarea { width: 100%; border: 1px solid var(--gray-border); border-radius: 6px; padding: 10px; font-size: 13px; font-family: inherit; resize: vertical; min-height: 80px; }
+  textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px #fff0e6; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; transition: all .2s; }
+  .btn-primary { background: var(--orange); color: #fff; }
+  .btn-primary:hover { background: var(--orange-dark); }
+  .btn-primary:disabled { background: #fdba74; cursor: not-allowed; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-green:hover { background: #15803d; }
+  .btn-gray { background: #e5e7eb; color: var(--text); }
+  .btn-gray:hover { background: #d1d5db; }
+  .action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-chip { background: var(--blue-light); border: 1px solid var(--blue-border); border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 700; color: var(--orange); }
+  .stat-chip.green { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
+  .stat-chip.yellow { background: var(--yellow-light); border-color: var(--yellow-border); color: var(--yellow); }
+  .section-title { font-size: 15px; font-weight: 800; border-left: 4px solid var(--orange); padding-left: 10px; margin-bottom: 14px; color: var(--orange); }
+  .filter-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .filter-row label { font-size: 13px; font-weight: 600; }
+  .filter-row select, .filter-row input[type="text"] { border: 1px solid var(--gray-border); border-radius: 6px; padding: 5px 10px; font-size: 13px; font-family: inherit; }
+  .member-table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #fff0e6; font-weight: 700; padding: 8px 10px; text-align: left; border-bottom: 2px solid var(--blue-border); white-space: nowrap; color: var(--orange-dark); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--gray-border); vertical-align: top; }
+  tr:hover td { background: #fafafa; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .badge-blue { background: var(--blue-light); color: var(--orange); border: 1px solid var(--blue-border); }
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-gray { background: var(--gray-light); color: var(--gray); border: 1px solid var(--gray-border); }
+  .slot-list { display: flex; flex-direction: column; gap: 4px; }
+  .slot-item { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; background: var(--green-light); border: 1px solid var(--green-border); border-radius: 6px; white-space: nowrap; }
+  .slot-item.warn { background: var(--yellow-light); border-color: var(--yellow-border); }
+  .slot-item.full { background: var(--red-light); border-color: var(--red-border); }
+  .teacher-section { margin-bottom: 24px; }
+  .teacher-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .teacher-name { font-size: 15px; font-weight: 700; }
+  .level-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .guidelines-box { background: var(--blue-light); border: 1px solid var(--blue-border); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+  .guidelines-box h3 { font-size: 13px; font-weight: 700; color: var(--orange); margin-bottom: 6px; }
+  .guidelines-box p { font-size: 13px; white-space: pre-wrap; color: var(--text-sub); }
+  .no-data { text-align: center; padding: 40px; color: var(--text-muted); }
+  .no-data .big { font-size: 40px; margin-bottom: 8px; }
+  .progress-wrap { display: none; }
+  .progress-wrap.show { display: block; }
+  .progress-bar { height: 4px; background: var(--blue-light); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width .3s; }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--gray-border); margin-bottom: 16px; }
+  .tab-btn { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-muted); border-radius: 6px 6px 0 0; transition: all .2s; font-family: inherit; }
+  .tab-btn.active { color: var(--orange); border-bottom: 2px solid var(--orange); margin-bottom: -2px; background: var(--blue-light); }
+  .tab-btn:hover:not(.active) { background: var(--gray-light); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  details { border: 1px solid var(--gray-border); border-radius: 6px; margin-bottom: 6px; }
+  summary { padding: 8px 12px; cursor: pointer; font-weight: 700; font-size: 13px; list-style: none; display: flex; align-items: center; gap: 8px; color: var(--orange-dark); }
+  summary::before { content: '▶'; font-size: 10px; transition: transform .2s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details > div { padding: 12px; border-top: 1px solid var(--gray-border); }
+  .bro-info { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px; font-size: 12px; margin-top: 6px; }
+  @media (max-width: 700px) {
+    .upload-grid { grid-template-columns: 1fr; }
+    .filter-row { flex-direction: column; align-items: flex-start; }
+  }
+  .product-filter-box { background: #fff7ed; border: 1px solid var(--blue-border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+  .product-filter-title { font-weight: 700; font-size: 13px; color: var(--orange-dark); margin-bottom: 8px; }
+  .product-check-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pcheck { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 16px; border: 1px solid var(--blue-border); background: #fff; font-size: 12px; cursor: pointer; transition: all .2s; }
+  .pcheck:has(input:checked) { background: var(--orange); color: #fff; border-color: var(--orange); }
+  .pcheck input { display: none; }
+  .nassign-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .n-input { width: 70px; border: 2px solid var(--blue-border); border-radius: 6px; padding: 5px 8px; font-size: 14px; font-weight: 700; font-family: inherit; text-align: center; }
+  .n-input:focus { outline: none; border-color: var(--orange); }
+  .early-section { background: var(--yellow-light); border: 1px solid var(--yellow-border); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+  .early-section h3 { font-size: 13px; font-weight: 700; color: var(--yellow); margin-bottom: 8px; }
+  .random-section { margin-top: 16px; }
+  .random-teacher-block { margin-bottom: 12px; padding: 12px; background: var(--blue-light); border-radius: 8px; border: 1px solid var(--blue-border); }
+  .random-teacher-name { font-weight: 700; color: var(--orange-dark); margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📋 회원 배정 도우미</h1>
+  <p class="subtitle">두 엑셀 파일을 업로드하면 배정이 필요한 회원과 각 교사의 가능 시간대를 자동으로 비교합니다.</p>
+
+  <!-- 파일 업로드 -->
+  <div class="card">
+    <h2>① 파일 업로드</h2>
+    <div class="mode-selector">
+      <span class="mode-label">교사 유형:</span>
+      <select id="modeSelect" onchange="setMode(this.value)" class="mode-select">
+        <option value="">-- 선택하세요 --</option>
+        <option value="gen">그룹일반</option>
+        <option value="genN">그룹일반(N)</option>
+        <option value="eng">그룹영어</option>
+        <option value="engJj">영어 자주표</option>
+      </select>
+      <span class="mode-hint" id="modeHint">교사 유형을 선택하면 비교 기준이 자동으로 설정됩니다</span>
+    </div>
+    <!-- 구독상품 필터 -->
+    <div class="product-filter-box">
+      <div class="product-filter-title">📦 구독상품 필터 <span style="font-weight:400;font-size:12px;color:var(--text-muted)">(미선택 시 전체 포함)</span></div>
+      <div class="product-check-grid" id="productCheckGrid">
+        <span style="color:var(--text-muted);font-size:12px">배정 파일을 업로드하면 상품 목록이 자동으로 표시됩니다</span>
+      </div>
+    </div>
+    <!-- 교사당 배정 인원 -->
+    <div class="nassign-row">
+      <span class="mode-label">교사당 임의 배정 인원:</span>
+      <input type="number" id="nPerTeacher" value="5" min="1" max="30" class="n-input">
+      <span style="font-size:12px;color:var(--text-muted)">명</span>
+    </div>
+    <div class="upload-grid">
+      <div class="upload-box" id="box1" onclick="document.getElementById('file1').click()">
+        <div class="upload-icon">📄</div>
+        <div class="upload-label">당일 배정 회원 파일</div>
+        <div class="upload-hint">당일 배정 회원_배정 시트 붙여넣기(ctrl+shift+v).xlsx</div>
+        <div class="upload-status" id="stat1">클릭하거나 파일을 여기에 드래그하세요</div>
+        <input type="file" id="file1" accept=".xlsx,.xls" onclick="event.stopPropagation()" style="display:none">
+      </div>
+      <div class="upload-box" id="box2" onclick="document.getElementById('file2').click()">
+        <div class="upload-icon">📊</div>
+        <div class="upload-label">교사 개별 스케줄러 파일</div>
+        <div class="upload-hint">각 팀 개별 스케줄러.xlsx</div>
+        <div class="upload-status" id="stat2">클릭하거나 파일을 여기에 드래그하세요</div>
+        <input type="file" id="file2" accept=".xlsx,.xls" onclick="event.stopPropagation()" style="display:none">
+      </div>
+    </div>
+  </div>
+
+  <!-- 추가 지침 -->
+  <div class="card">
+    <h2>② 추가 지침 입력 <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(선택사항)</span></h2>
+    <textarea id="guidelines" placeholder="예) 80w 상품 회원만 골라주세요 / 교사별 3명씩 고루 배정해주세요 / 특정 교사 제외 등"></textarea>
+    <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">기본 지침 외 추가 조건을 자유롭게 입력하세요. 결과 화면 및 다운로드 엑셀에 함께 표시됩니다.</p>
+  </div>
+
+  <!-- 실행 버튼 -->
+  <div class="card">
+    <div class="action-bar">
+      <button class="btn btn-primary" id="btnProcess" onclick="processFiles()" disabled>🔍 비교 시작</button>
+      <button class="btn btn-secondary" onclick="randomAssign()" style="margin-left:8px">🎲 임의 배정</button>
+      <button class="btn btn-gray" onclick="resetAll()">↺ 초기화</button>
+      <span id="processStatus" style="font-size:13px;color:var(--text-muted)">파일 2개를 모두 업로드하면 활성화됩니다.</span>
+    </div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- 결과 영역 -->
+  <div id="resultsArea" style="display:none">
+    <!-- 요약 통계 -->
+    <div class="card" id="summaryCard"></div>
+
+    <!-- 탭 -->
+    <div class="card">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('tabByMember', this)">👤 회원별 보기</button>
+        <button class="tab-btn" onclick="switchTab('tabByTeacher', this)">👩‍🏫 교사별 보기</button>
+      </div>
+
+      <!-- 회원별 탭 -->
+      <div class="tab-panel active" id="tabByMember">
+        <div class="guidelines-box" id="guidelinesDisplay" style="display:none">
+          <h3>📌 추가 지침</h3>
+          <p id="guidelinesText"></p>
+        </div>
+        <div class="filter-row">
+          <label>레벨 필터:</label>
+          <select id="filterLevel" onchange="applyFilters()">
+            <option value="">전체</option>
+          </select>
+          <label>가능요일:</label>
+          <select id="filterDay" onchange="applyFilters()">
+            <option value="">전체</option>
+            <option value="월">월</option>
+            <option value="화">화</option>
+            <option value="수">수</option>
+            <option value="목">목</option>
+            <option value="금">금</option>
+          </select>
+          <label>이름/CAS 검색:</label>
+          <input type="text" id="filterSearch" placeholder="검색..." oninput="applyFilters()" style="width:140px">
+        </div>
+        <div id="earlyMembersSection" class="early-section" style="display:none;margin-top:12px"></div>
+        <div class="member-table-wrap" id="memberTableWrap"></div>
+      </div>
+
+      <!-- 교사별 탭 -->
+      <div class="tab-panel" id="tabByTeacher">
+        <div id="randomAssignResult" class="random-section" style="display:none;margin-bottom:16px"></div>
+        <div id="teacherPanels"></div>
+      </div>
+    </div>
+
+    <!-- 다운로드 -->
+    <div class="card">
+      <div class="action-bar">
+        <button class="btn btn-green" onclick="downloadExcel()">⬇️ 결과 엑셀 다운로드</button>
+        <span style="font-size:12px;color:var(--text-muted)">교사 탭별로 정리된 엑셀 파일이 저장됩니다.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== 전역 데이터 ==========
+let wb1 = null, wb2 = null;
+let membersData = [], teachersData = [], matchResults = [];
+let lastRandomAssign = null; // { n, perTeacher, unassigned } - 엑셀 다운로드에서 사용
+let selectedProducts = [];
+// CAS → {gubun, firstWeek} : ★배정 시트의 "모든" 행(이미 배정된 회원 포함)을 담은 조회용 맵.
+// 자주표(자기주도표) 회원이 이미 어느 교사 방에 A주/B주로 들어가 있는지 판별하려면
+// (교사 스케줄러 파일에는 CAS번호만 있고 구분/첫수업주간이 없으므로) 이 맵으로 역조회한다.
+let fullMemberIndex = new Map();
+
+function toggleProduct(el) {
+  const val = el.value;
+  if (el.checked) { if (!selectedProducts.includes(val)) selectedProducts.push(val); }
+  else { selectedProducts = selectedProducts.filter(v => v !== val); }
+}
+
+function productMatch(productStr) {
+  if (selectedProducts.length === 0) return true;
+  if (!productStr) return false;
+  const p = productStr.trim();
+  // 약정기간 제거 후 비교 (1년/2년/3년 자동 무시)
+  const base = stripYear(p);
+  return selectedProducts.some(sel => base === sel || base.startsWith(sel) || base.includes(sel));
+}
+
+// 상품명에서 약정기간(1년/2년/3년 등) 제거
+function stripYear(p) {
+  return p.replace(/\s*\(?\d년\)?/g, '').trim();
+}
+
+// 배정 파일에서 고유 상품명 읽어 체크박스 동적 생성
+function populateProductFilter(wb) {
+  const ws = wb.Sheets['★배정'];
+  if (!ws) return;
+  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false });
+  const products = new Set();
+  for (let i = 8; i < aoa.length; i++) {
+    const row = aoa[i];
+    if (!row || !row[COL.CAS]) continue;
+    const cas = String(row[COL.CAS] || '').trim();
+    if (!cas || isNaN(parseInt(cas))) continue;
+    const p = stripYear(String(row[COL.PRODUCT] || '').trim());
+    if (p && p !== 'null') products.add(p);
+  }
+  const grid = document.getElementById('productCheckGrid');
+  if (!grid) return;
+  if (products.size === 0) {
+    grid.innerHTML = '<span style="color:var(--text-muted);font-size:12px">상품 정보 없음</span>';
+    return;
+  }
+  // 초기화 & 이전 선택 유지
+  const prevSelected = [...selectedProducts];
+  selectedProducts = [];
+  const sorted = [...products].sort();
+  grid.innerHTML = sorted.map(p => {
+    const checked = prevSelected.includes(p) ? 'checked' : '';
+    if (checked) selectedProducts.push(p);
+    const safe = p.replace(/"/g, '&quot;');
+    return `<label class="pcheck"><input type="checkbox" value="${safe}" onchange="toggleProduct(this)" ${checked}> ${p}</label>`;
+  }).join('');
+}
+let currentMode = ''; // '' = 미선택, 'eng' = 그룹영어, 'gen' = 그룹일반
+
+function setMode(val) {
+  currentMode = val;
+  const hint = document.getElementById('modeHint');
+  const sel = document.getElementById('modeSelect');
+  if (val === 'eng') {
+    hint.textContent = '✅ 영어교사 열 비교 · 레벨 기준';
+    sel.classList.add('selected');
+  } else if (val === 'gen') {
+    hint.textContent = '✅ 관리교사 열 비교 · 학년 기준';
+    sel.classList.add('selected');
+  } else if (val === 'genN') {
+    hint.textContent = '✅ 관리교사 열 비교 · 학년 기준 (N상품)';
+    sel.classList.add('selected');
+  } else if (val === 'engJj') {
+    hint.textContent = '✅ 영어교사 열 비교 · 레벨 기준 (자주표)';
+    sel.classList.add('selected');
+  } else {
+    hint.textContent = '교사 유형을 선택하면 비교 기준이 자동으로 설정됩니다';
+    sel.classList.remove('selected');
+  }
+}
+
+// ========== 컬럼 인덱스 (0-based) ==========
+const COL = {
+  // ★배정 시트
+  GUBUN: 1, NO: 2, CAS: 3, NAME: 4, PARENT: 5, PHONE: 6, GRADE: 7,
+  SIBLING_FLAG: 16,  // Q: 형제회원 (Y/공란)
+  PRODUCT: 8, CONTRACT: 9, START: 10, END: 11,
+  FIRST_WEEK: 17,
+  MGR_TEACHER: 18,   // S: 관리교사 배정교사
+  MGR_DATE: 22,      // W: 관리교사 배정일
+  ENG_TEACHER: 24,   // Y: 영어교사 배정교사
+  LEVEL: 25,         // Z: 레벨
+  GRADE: 7,          // H: 학년
+  ENG_DAY: 26, ENG_TIME: 27,
+  ENG_DATE: 29,     // AD: 배정일 (청철/보류/확인중 체크)
+  POSSIBLE_DAYS: 35, // AJ: 가능일정
+  NOTE: 36,          // AK: 특이사항
+  BROTHER: 37,       // AL: 형제
+  AP_DAYS: 41,       // AP: 가능 요일
+  AQ_34: 42, AR_45: 43, AS_56: 44, AT_67: 45, AU_78: 46, AV_89: 47,
+  AW_REQUEST: 48,
+  AX_ENG: 49,        // AX: 영어 자주표 여부 ('영어' 포함 시 대상)
+  LEVEL_AY: 50,      // AY: 코스북 레벨
+  BRO_CAS: 54, BRO_NAME: 55, BRO_MGR: 56, BRO_ENG: 57, BRO_2CAS: 58 // BG: 형제2 회원번호
+};
+
+const EXCLUDE_KW = ['청철', '보류', '확인중'];
+const DAYS_ORDER = ['월','화','수','목','금'];
+// 업무시간은 8:30 타임(8:30~9:00)까지가 마지막 (9~10시 없음)
+const TIME_SLOTS = ['3:00','3:30','4:00','4:30','5:00','5:30','6:00','6:30','7:00','7:30','8:00','8:30'];
+
+// "딱 맞는" 슬롯 기준: 현재 7/8명 → 이 회원을 배정하면 8/8(마감) 완성됨
+// 화면에서 .slot-item.warn / badge-yellow 로 표시되는 것과 동일한 기준
+const EXACT_FIT_COUNT = 7;
+function isExactFitSlot(slot) { return !!slot && slot.currentCount >= EXACT_FIT_COUNT; }
+function hasExactFitMatch(matches) {
+  return (matches || []).some(mt => mt.hasSlots && !mt.videoRefused && mt.availableSlots.some(isExactFitSlot));
+}
+// 엑셀 셀 노란색 강조 스타일 (화면의 badge-yellow/.slot-item.warn 과 동일한 의미)
+const XLSX_YELLOW_FILL = { fill: { patternType: 'solid', fgColor: { rgb: 'FFF59D' } } };
+
+// 이른 시간대(교사 스케줄러 가능시간대 계산용, 3~4시대) - 회원 0명이면 열지 않음
+const EARLY_TIMES_SET = new Set(['3:00','3:30','4:00','4:30']);
+
+// ========== 자주표(자기주도표) 회원 A주/B주 판별 ==========
+// 그룹영어(eng/engJj) 한정: 정회원 배정파일 B열 '구분'이 '자주표'인 회원은 격주(2주 간격)로
+// 코칭하며, R열(첫 수업주간)에 적힌 날짜(항상 월요일)로 A주/B주를 구분한다.
+// 기준일: 2026-08-24(월) = B주, 2026-08-31(월) = A주. 이후 2주 간격으로 계속 반복됨(과거 방향도 동일).
+const AB_WEEK_ANCHOR = new Date(2026, 7, 24); // 2026-08-24, B주 기준일
+function getAbWeek(dateVal) {
+  if (!dateVal) return null;
+  const d = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+  if (isNaN(d.getTime())) return null;
+  const dOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((dOnly - AB_WEEK_ANCHOR) / 86400000);
+  const diffWeeks = Math.round(diffDays / 7);
+  const mod = ((diffWeeks % 2) + 2) % 2; // 음수 대비 보정
+  return mod === 0 ? 'B주' : 'A주';
+}
+// 구분(B열)에 '자주표'가 포함되어 있으면 자기주도표(격주) 회원
+function isJajuMember(gubunVal) {
+  return String(gubunVal || '').includes('자주표');
+}
+// 화면/엑셀 공통: 코칭구분(전과목·단과 / 자주표) 표시용 라벨. genN의 '코칭주기' 표시와 같은 위치에 씀.
+// week: 배정된 슬롯의 assignedWeek('A주'/'B주') - 있으면 함께 표시
+function isEngJajuMode() { return currentMode === 'eng' || currentMode === 'engJj'; }
+function jajuCycleLabel(m, week) {
+  if (!isEngJajuMode()) return '';
+  return m.isJaju ? `자주표${week ? ` / ${week}` : ''}` : '전과목·단과';
+}
+
+// ========== 파일 업로드 ==========
+document.getElementById('file1').addEventListener('change', e => handleFile(e, 1));
+document.getElementById('file2').addEventListener('change', e => handleFile(e, 2));
+
+['box1','box2'].forEach((id, i) => {
+  const box = document.getElementById(id);
+  box.addEventListener('dragover', e => { e.preventDefault(); box.style.background='#ffe8d6'; box.style.borderColor='var(--orange)'; });
+  box.addEventListener('dragleave', () => { box.style.background=''; box.style.borderColor=''; });
+  box.addEventListener('drop', e => {
+    e.preventDefault(); box.style.background='';
+    const file = e.dataTransfer.files[0];
+    if (file) loadFile(file, i+1);
+  });
+});
+
+function handleFile(e, num) { loadFile(e.target.files[0], num); }
+
+function loadFile(file, num) {
+  const stat = document.getElementById('stat'+num);
+  const box = document.getElementById('box'+num);
+  if (!file || !file.name.match(/\.xlsx?$/i)) {
+    stat.textContent = '❌ xlsx 파일만 가능합니다'; stat.className='upload-status err';
+    box.className='upload-box error'; return;
+  }
+  stat.textContent = '⏳ 읽는 중...'; stat.className='upload-status';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
+      if (num === 1) { wb1 = wb; populateProductFilter(wb); }
+      else wb2 = wb;
+      stat.textContent = `✅ ${file.name}`;
+      stat.className = 'upload-status ok';
+      box.className = 'upload-box loaded';
+      checkReady();
+    } catch(err) {
+      stat.textContent = '❌ 파일 읽기 오류: ' + err.message;
+      stat.className = 'upload-status err';
+      box.className = 'upload-box error';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function checkReady() {
+  const btn = document.getElementById('btnProcess');
+  const st = document.getElementById('processStatus');
+  if (wb1 && wb2) {
+    btn.disabled = false;
+    st.textContent = '✅ 준비 완료! 비교 시작 버튼을 눌러주세요.';
+    st.style.color = 'var(--green)';
+  }
+}
+
+function resetAll() {
+  wb1 = wb2 = null; membersData = []; teachersData = []; matchResults = []; lastRandomAssign = null;
+  document.getElementById('file1').value = '';
+  document.getElementById('file2').value = '';
+  ['1','2'].forEach(n => {
+    document.getElementById('stat'+n).textContent = '파일을 선택하거나 드래그하세요';
+    document.getElementById('stat'+n).className = 'upload-status';
+    document.getElementById('box'+n).className = 'upload-box';
+  });
+  document.getElementById('btnProcess').disabled = true;
+  document.getElementById('processStatus').textContent = '파일 2개를 모두 업로드하면 활성화됩니다.';
+  document.getElementById('processStatus').style.color = '';
+  document.getElementById('resultsArea').style.display = 'none';
+  document.getElementById('guidelines').value = '';
+  const raEl = document.getElementById('randomAssignResult');
+  if (raEl) { raEl.innerHTML = ''; raEl.style.display = 'none'; }
+}
+
+// ========== 유틸 ==========
+function safeStr(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return v.toLocaleDateString('ko-KR');
+  return String(v).trim();
+}
+function safeNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(/[^0-9.]/g,''));
+  return isNaN(n) ? null : n;
+}
+function fmtDate(v) {
+  if (!v) return '';
+  if (v instanceof Date) return `${v.getFullYear()}.${v.getMonth()+1}.${v.getDate()}`;
+  return safeStr(v);
+}
+// 로컬(브라우저) 날짜를 YYYY-MM-DD로 반환 (엑셀 파일명용 - UTC 변환으로 인한 날짜 오차 방지)
+function getDateStr(d) {
+  d = d || new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+// 수업 주차(첫수업주간) 표시
+function firstWeekCell(m) {
+  return m.firstWeek ? fmtDate(m.firstWeek) : '미입력';
+}
+// 상품명: 원래 상품명 그대로 표시
+function productCell(m) {
+  return m.product || '';
+}
+// 단과여부: 상품명이 정확히 "캐츠잉글리시"인 경우만 "단과" (캐츠잉글리시+캐츠홈 등 결합상품은 단과 아님)
+function singleCourseCell(m) {
+  return (m.product || '').trim() === '캐츠잉글리시' ? '단과' : '';
+}
+// 배정 불가 회원 여부: 매칭되는 가능 슬롯(hasSlots)이 전혀 없는 경우
+function isUnassignable(r) {
+  return !r.matches.some(mt => mt.hasSlots);
+}
+function hasExclude(v) {
+  if (!v) return false;
+  return EXCLUDE_KW.some(kw => String(v).includes(kw));
+}
+function parseTime(v) {
+  if (!v) return null;
+  if (v instanceof Date) return `${v.getHours()}:${String(v.getMinutes()).padStart(2,'0')}`;
+  const s = String(v).trim();
+  // "7:00", "7:30", "07:00" 등
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return `${parseInt(m[1])}:${m[2]}`;
+  // Excel serial time
+  if (!isNaN(s) && parseFloat(s) < 1) {
+    const tot = Math.round(parseFloat(s) * 1440);
+    return `${Math.floor(tot/60)}:${String(tot%60).padStart(2,'0')}`;
+  }
+  return s;
+}
+
+// 탭 이름에서 교사명과 레벨 추출
+function parseTabName(name) {
+  const skip = ['사용X','일반교사 스케줄','데이터','게스트'];
+  if (skip.some(s => name.includes(s))) return null;
+
+  // 이름과 레벨 추출: "3-6 김재인(1,2,3,4,6)" 또는 "3-31 김소연A"
+  let teacherName = name;
+  let levels = [];
+
+  // 날짜 앞부분 제거 (숫자-숫자 패턴)
+  teacherName = teacherName.replace(/^\d+-\d+\s*/, '').trim();
+
+  // 괄호 안 숫자 추출
+  const lvMatch = teacherName.match(/\(([^)]+)\)/);
+  if (lvMatch) {
+    const content = lvMatch[1];
+    // "1,2,3,4,6" 또는 "Lv1.3.80.100W" 형태
+    const nums = content.match(/\d+/g);
+    if (nums) {
+      levels = nums.map(n => {
+        const num = parseInt(n);
+        if (num === 80 || num === 100) return n + 'W';
+        return num;
+      });
+    }
+    // 파닉스
+    if (content.toLowerCase().includes('파닉스') || content.toLowerCase().includes('phonics')) levels.push('파닉스');
+    teacherName = teacherName.replace(/\s*\([^)]+\)/, '').trim();
+  }
+  // "Lv1.3.80W.100W" 형태가 괄호 없이 있는 경우도 처리
+  const lvMatch2 = teacherName.match(/Lv([\d.,]+)/i);
+  if (lvMatch2 && levels.length === 0) {
+    const nums = lvMatch2[1].match(/\d+/g);
+    if (nums) levels = nums.map(n => {
+      const num = parseInt(n);
+      return (num === 80 || num === 100) ? n+'W' : num;
+    });
+    teacherName = teacherName.replace(/\s*Lv[\d.,W]+/i, '').trim();
+  }
+
+  return { tabName: name, teacherName, levels };
+}
+
+// 레벨 텍스트에서 레벨 배열 추출 (행8 '배정 회원 (Lv 1,3,80W)' 형태)
+function parseLevelText(text) {
+  if (!text) return [];
+  const levels = [];
+  const nums = text.match(/\d+/g);
+  if (nums) {
+    nums.forEach(n => {
+      const num = parseInt(n);
+      if (num >= 1 && num <= 6) levels.push(num);
+      else if (num === 80 || num === 100) levels.push(n+'W');
+    });
+  }
+  if (/파닉스|phonics/i.test(text)) levels.push('파닉스');
+  return levels;
+}
+
+// "화상 코칭 거부" / "화상코칭거부" 등 공백 무시하고 포함 여부 체크
+function isVideoRefused(v) {
+  if (!v) return false;
+  return String(v).replace(/\s/g, '').includes('화상코칭거부');
+}
+
+// 가능 요일 파싱 ("월, 화, 수" or "월화수" or "월,화,수")
+// "화상 코칭 거부" 같은 문구의 '화'가 화요일로 오인식되지 않도록 먼저 제거
+function parseDays(v) {
+  if (!v) return [];
+  const s = String(v).replace(/화\s*상\s*코\s*칭\s*거\s*부/g, '');
+  const found = [];
+  DAYS_ORDER.forEach(d => { if (s.includes(d)) found.push(d); });
+  return found;
+}
+
+// 불가 시간 블록 체크 (X = 불가)
+function getBlockedSlots(row) {
+  const blocked = new Set();
+  const blockMap = [
+    [COL.AQ_34, ['3:00','3:30']],
+    [COL.AR_45, ['4:00','4:30']],
+    [COL.AS_56, ['5:00','5:30']],
+    [COL.AT_67, ['6:00','6:30']],
+    [COL.AU_78, ['7:00','7:30']],
+    [COL.AV_89, ['8:00','8:30']]
+  ];
+  blockMap.forEach(([col, times]) => {
+    const v = safeStr(row[col]).toUpperCase();
+    if (v === 'X') times.forEach(t => blocked.add(t));
+  });
+  return blocked;
+}
+
+// 30분 더한 시간 문자열 반환 (예: "8:30" → "9:00")
+function addHalfHour(t) {
+  const [h, m] = t.split(':').map(Number);
+  let nh = h, nm = m + 30;
+  if (nm >= 60) { nm -= 60; nh += 1; }
+  return `${nh}:${String(nm).padStart(2, '0')}`;
+}
+
+// 불가 시간(blockedSlots, AQ~AV)을 "가능 시간대"로 보기 쉽게 변환
+function getAvailableTimesDisplay(blockedSlots) {
+  const avail = TIME_SLOTS.filter(t => !blockedSlots.has(t));
+  if (avail.length === 0) return '가능 시간 없음';
+  if (avail.length === TIME_SLOTS.length) return '전체 시간 가능';
+  const idxs = avail.map(t => TIME_SLOTS.indexOf(t));
+  const ranges = [];
+  let start = idxs[0], prev = idxs[0];
+  for (let i = 1; i < idxs.length; i++) {
+    if (idxs[i] === prev + 1) { prev = idxs[i]; continue; }
+    ranges.push([start, prev]);
+    start = idxs[i]; prev = idxs[i];
+  }
+  ranges.push([start, prev]);
+  return ranges.map(([s, e]) => {
+    const startTime = TIME_SLOTS[s];
+    const endTime = addHalfHour(TIME_SLOTS[e]);
+    return `${startTime}~${endTime}`;
+  }).join(', ') + ' 가능';
+}
+
+// AP(불가능시간 설문 원문) 기반 가능요일/표시문구 분석
+// - AP에 '가능' 관련 문구가 있으면(예: "모든요일 가능") 가능 정보로 그대로 사용
+// - AP에 요일만 있으면(예: "화") 그 요일은 불가로 처리 (나머지 요일은 가능)
+// - AP에 요일 정보가 전혀 없으면 정보 없음으로 처리
+function getApAnalysis(apRaw) {
+  const ap = String(apRaw || '').trim();
+  // '불가능'/'불가'를 먼저 제거한 뒤 '가능' 문구 포함 여부 체크 (오인식 방지)
+  const apForCheck = ap.replace(/\s/g, '').replace(/불가능|불가/g, '');
+  const hasGaneung = apForCheck.includes('가능');
+
+  if (ap && hasGaneung) {
+    const days = parseDays(ap);
+    return {
+      possibleDays: days.length > 0 ? days : DAYS_ORDER.slice(),
+      dayRestricted: days.length > 0,
+      apDisplay: ap
+    };
+  }
+
+  const unavailDays = parseDays(ap);
+  if (unavailDays.length > 0) {
+    return {
+      possibleDays: DAYS_ORDER.filter(d => !unavailDays.includes(d)),
+      dayRestricted: true,
+      apDisplay: `${unavailDays.join(',')} 불가`
+    };
+  }
+
+  return { possibleDays: [], dayRestricted: false, apDisplay: ap || '' };
+}
+
+// AJ(가능일정 수기) 우선 / AP(불가능시간 설문 원문) 보조 — 가능요일 판단
+// - AJ는 설문 답변을 정리하거나 전달받은 특이사항을 옮겨 적은 "최신 정리본"이므로 AJ에
+//   요일 정보가 있으면 그것을 그대로 가능요일로 사용 (AP는 무시)
+// - AJ에 요일 관련 내용이 전혀 없으면(=AJ 작성 전에 설문만 인입된 상태) AP 기준으로 판단
+// - apDisplay(불가능시간(설문 답변) 표시용 "요일: ..." 문구)는 항상 AP 분석 결과를 사용
+function parseAvailability(apRaw, ajRaw) {
+  const ajDays = parseDays(ajRaw);
+  const apInfo = getApAnalysis(apRaw);
+
+  if (ajDays.length > 0) {
+    return {
+      possibleDays: ajDays,
+      dayRestricted: true,
+      apDisplay: apInfo.apDisplay
+    };
+  }
+
+  return {
+    possibleDays: apInfo.possibleDays,
+    dayRestricted: apInfo.dayRestricted,
+    apDisplay: apInfo.apDisplay
+  };
+}
+
+// ========== 형제회원 정보 표시 ==========
+function getBroHtml(m) {
+  if (m.broInfo) {
+    return `<div class="bro-info">👫 CAS:${m.broInfo.cas}`
+      + (m.broInfo.name ? `<br>${m.broInfo.name}` : '')
+      + `<br>관리:${m.broInfo.mgrTeacher || '-'} / 영어:${m.broInfo.engTeacher || '-'}</div>`;
+  }
+  if (m.brotherFlag === 'Y' || m.brotherFlag === 'y') {
+    return '<span class="badge badge-blue">형제있음</span>';
+  }
+  return '-';
+}
+
+function getBroStr(m) {
+  if (m.broInfo) {
+    return `CAS:${m.broInfo.cas} ${m.broInfo.name || ''} 관리:${m.broInfo.mgrTeacher || '-'} 영어:${m.broInfo.engTeacher || '-'}`.trim();
+  }
+  if (m.brotherFlag === 'Y' || m.brotherFlag === 'y') return '형제 있음';
+  return '';
+}
+
+// ========== 자주표 A/B 판별용 전체 회원 인덱스 ==========
+// ★배정 시트의 모든 행(이미 배정 완료된 회원 포함, 필터 없음)을 CAS번호로 조회 가능하게 색인.
+// 교사 스케줄러 파일에는 회원의 구분(자주표 여부)/첫수업주간 정보가 없기 때문에,
+// 이미 방에 들어가 있는 회원의 자주표 여부와 A주/B주를 알아내려면 이 인덱스로 역조회해야 한다.
+function buildFullMemberIndex(wb) {
+  const map = new Map();
+  const ws = wb.Sheets['★배정'];
+  if (!ws) return map;
+  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' });
+  for (let i = 8; i < aoa.length; i++) {
+    const row = aoa[i];
+    if (!row || !row[COL.CAS]) continue;
+    const cas = safeStr(row[COL.CAS]);
+    if (!cas || isNaN(parseInt(cas))) continue;
+    const gubun = safeStr(row[COL.GUBUN]);
+    const firstWeek = row[COL.FIRST_WEEK] ? new Date(row[COL.FIRST_WEEK]) : null;
+    map.set(cas, {
+      gubun,
+      isJaju: isJajuMember(gubun),
+      firstWeek,
+      abWeek: isJajuMember(gubun) ? getAbWeek(firstWeek) : null
+    });
+  }
+  return map;
+}
+
+// ========== 파싱: 배정 파일 ==========
+function parseAssignmentFile(wb) {
+  const ws = wb.Sheets['★배정'];
+  if (!ws) throw new Error("'★배정' 시트를 찾을 수 없습니다.");
+  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' });
+
+  const members = [];
+  for (let i = 8; i < aoa.length; i++) { // 행 9부터 (0-indexed 8)
+    const row = aoa[i];
+    if (!row || !row[COL.CAS]) continue;
+
+    const cas = safeStr(row[COL.CAS]);
+    if (!cas || cas === '' || isNaN(parseInt(cas))) continue;
+
+    // 영어교사 배정교사 비어있는지
+    // 모드에 따라 영어교사/관리교사 열 분기
+    const isEng = currentMode === 'eng' || currentMode === 'engJj';
+    const teacherCol = isEng ? COL.ENG_TEACHER : COL.MGR_TEACHER;
+    const dateCol = isEng ? COL.ENG_DATE : COL.MGR_DATE;
+
+    const assignedTeacher = safeStr(row[teacherCol]);
+    if (assignedTeacher !== '' && assignedTeacher !== 'null') continue; // 이미 배정됨
+
+    // 첫 수업 주간 미입력 → 아직 시스템 미로그인 회원이므로 제외
+    const firstWeekRaw = safeStr(row[COL.FIRST_WEEK]);
+    if (!firstWeekRaw || firstWeekRaw === 'null') continue;
+
+    // 배정일에 제외 키워드 있는지
+    const assignDate = safeStr(row[dateCol]);
+    if (hasExclude(assignDate)) continue;
+
+    // 레벨(영어) 또는 학년(일반) 가져오기
+    let level = '';
+    if (isEng) {
+      level = safeStr(row[COL.LEVEL]);
+      if (!level || level === 'null' || level === '#N/A') level = safeStr(row[COL.LEVEL_AY]);
+      if (level === '#N/A' || level === 'null') level = '';
+      // 레벨(Z열)에 '예비초' 또는 '알파벳'이라고 적힌 회원도 '파닉스' 반으로 통합 배정
+      if (/예비초|알파벳/.test(level)) level = '파닉스';
+    } else {
+      // 학년: H열(index 7) → "초등 3" → "3"
+      const gradeRaw = safeStr(row[COL.GRADE]);
+      const gm = gradeRaw.match(/(\d+)/);
+      level = gm ? gm[1] : gradeRaw; // 학년을 level 필드에 저장
+    }
+
+    // 가능 요일/시간 (AP~AW = 불가능시간 설문 원문, AJ = 가능일정 수기)
+    const _ajRaw = safeStr(row[COL.POSSIBLE_DAYS]);
+    const _apVal = row[COL.AP_DAYS];
+    let _apRaw = safeStr(_apVal);
+    if (_apRaw === 'null') _apRaw = '';
+
+    // 화상코칭거부 여부 (AJ, AP 둘 다 체크 - "화상 코칭 거부"가 화요일로 오인식되는 것 방지)
+    const videoRefused = isVideoRefused(_ajRaw) || isVideoRefused(_apRaw);
+
+    let possibleDays, dayRestricted, apDisplay;
+    if (videoRefused) {
+      possibleDays = [];
+      dayRestricted = false;
+      apDisplay = '화상코칭거부';
+    } else {
+      const av = parseAvailability(_apRaw, _ajRaw);
+      possibleDays = av.possibleDays;
+      dayRestricted = av.dayRestricted;
+      apDisplay = av.apDisplay;
+    }
+
+    // 요일 정보가 전혀 없으면 제외 (팀명, 공란 등) - 화상코칭거부/요일 전체불가는 유지
+    if (!videoRefused && possibleDays.length === 0 && !dayRestricted) continue;
+
+    // 불가 시간 (AQ~AV) → 가능 시간대로 변환
+    const blockedSlots = videoRefused ? new Set() : getBlockedSlots(row);
+    const availTimeDisplay = videoRefused ? '' : getAvailableTimesDisplay(blockedSlots);
+    const requestStr = safeStr(row[COL.AW_REQUEST]);
+
+    // 불가능시간(설문원문) 종합 표시 (요일/시간/AW 요청사항)
+    let unavailDisplay;
+    if (videoRefused) {
+      unavailDisplay = '화상코칭거부';
+    } else {
+      const lines = [`요일: ${apDisplay || '-'}`, `시간: ${availTimeDisplay}`];
+      if (requestStr && requestStr !== 'null') lines.push(`요청사항: ${requestStr}`);
+      unavailDisplay = lines.join('\n');
+    }
+
+    // 형제 정보 (BC: 형제1 회원번호, BG: 형제2 회원번호 - #REF!/공란 등 무효값 제외)
+    let broInfo = null;
+    const isValidCas = v => v && v !== '' && v !== 'null' && v !== '#REF!' && !isNaN(parseInt(v));
+    const broCasList = [row[COL.BRO_CAS], row[COL.BRO_2CAS]]
+      .map(safeStr)
+      .filter(isValidCas);
+    if (broCasList.length > 0) {
+      broInfo = {
+        cas: broCasList.join(', '),
+        name: safeStr(row[COL.BRO_NAME]),
+        mgrTeacher: safeStr(row[COL.BRO_MGR]),
+        engTeacher: safeStr(row[COL.BRO_ENG])
+      };
+    }
+
+    // 영어 자주표 모드: AX열에 '영어'가 포함된 회원만 대상
+    if (currentMode === 'engJj') {
+      const axVal = safeStr(row[COL.AX_ENG]);
+      if (!axVal.includes('영어')) continue;
+    }
+
+    // 상품 필터
+    const productVal = safeStr(row[COL.PRODUCT]);
+    if (!productMatch(productVal)) continue;
+
+    // genN 모드: 구독상품명에 "(N)"이 포함되면 격주코칭 회원
+    const isBiweekly = currentMode === 'genN' && /\(N\)/.test(productVal);
+
+    const gubunVal = safeStr(row[COL.GUBUN]);
+    const firstWeekDate = row[COL.FIRST_WEEK] ? new Date(row[COL.FIRST_WEEK]) : null;
+    // 그룹영어(eng/engJj) 한정: 구분(B열)이 '자주표'인 회원은 격주(A주/B주) 코칭
+    const isEngMode = currentMode === 'eng' || currentMode === 'engJj';
+    const isJaju = isEngMode && isJajuMember(gubunVal);
+    const abWeek = isJaju ? getAbWeek(firstWeekDate) : null;
+    // 학년(H열)에 '초등6'/'6학년'/'예비초'가 적혀있으면 영어교사가 관리교사를 겸함 (안내용 표시)
+    const gradeRawForMgr = safeStr(row[COL.GRADE]);
+    const engIsAlsoMgr = isEngMode && /초등\s*6|6\s*학년|예비초/.test(gradeRawForMgr);
+
+    members.push({
+      rowIdx: i,
+      cas, name: safeStr(row[COL.NAME]),
+      grade: safeStr(row[COL.GRADE]),
+      product: safeStr(row[COL.PRODUCT]),
+      gubun: gubunVal,
+      isBiweekly,
+      isJaju,
+      abWeek,
+      engIsAlsoMgr,
+      firstWeek: firstWeekDate,
+      firstWeekStr: safeStr(row[COL.FIRST_WEEK]),
+      level,
+      possibleDays,
+      dayRestricted,
+      blockedSlots,
+      videoRefused,
+      possibleScheduleRaw: safeStr(row[COL.POSSIBLE_DAYS]),  // AJ열 가능일정(수기)
+      possibleTimeRaw: _apRaw,  // AP열 원문
+      apDisplay,            // AP 해석 결과 (요일 불가/가능 정보)
+      availTimeDisplay,     // AQ~AV 기반 가능 시간대
+      unavailDisplay,       // 불가능시간(설문원문) 종합 표시
+      note: safeStr(row[COL.NOTE]),
+      brotherFlag: safeStr(row[COL.SIBLING_FLAG]) || safeStr(row[COL.BROTHER]),
+      broInfo,
+      request: requestStr
+    });
+  }
+
+  // 첫수업주간 빠른 순 정렬
+  members.sort((a, b) => {
+    if (!a.firstWeek && !b.firstWeek) return 0;
+    if (!a.firstWeek) return 1;
+    if (!b.firstWeek) return -1;
+    return a.firstWeek - b.firstWeek;
+  });
+
+  return members;
+}
+
+// 탭 이름/안내문구에서 레벨(학년) 정보를 못 찾았을 때, 그 탭에 이미 배정된 회원들의
+// 레벨(학년)로 해당 방의 레벨을 추정한다 (그룹코칭은 같은 레벨/학년끼리만 진행되므로
+// 탭에 회원이 있다면 그 회원들의 레벨이 곧 그 방의 레벨)
+function deriveLevelsFromMembers(membersInTab) {
+  const set = new Set();
+  membersInTab.forEach(mb => {
+    const v = String(mb.level || '').trim();
+    if (!v) return;
+    const num = parseInt(v);
+    if (!isNaN(num)) set.add(num);
+    else set.add(v);
+  });
+  return [...set];
+}
+
+// ========== 파싱: 스케줄러 파일 (genN: 매주/격주 A주B주) ==========
+function parseTeacherTabGenN(tabName, info, levels, aoa) {
+  const slotA = {}, slotB = {}; // key: "요일-시간" → 인원수
+  const membersInTab = [];
+  const EARLY_TIMES_SET = new Set(['3:00','3:30','4:00','4:30']);
+
+  // 회원 목록 (행9 = index 8부터)
+  // C열(2): 회원번호, D열(3): 회원명, E열(4): 학년, G열(6): 요일, H열(7): 시간,
+  // M열(12): 주차구분(A주/B주), N열(13): 매주(boolean)
+  for (let i = 8; i < aoa.length; i++) {
+    const row = aoa[i];
+    if (!row) continue;
+    const cas = safeStr(row[2]);
+    if (!cas || isNaN(parseInt(cas))) continue;
+
+    const day = safeStr(row[6]);
+    const time = parseTime(row[7]);
+    const weekGroup = safeStr(row[12]); // 'A주' / 'B주'
+    const wkRaw = row[13];
+    const isWeekly = wkRaw === true || wkRaw === 'TRUE' || wkRaw === 1 || safeStr(wkRaw).includes('매주');
+
+    const gradeRaw = safeStr(row[4]);
+    const gm = gradeRaw.match(/(\d+)/);
+    const memberLevel = gm ? gm[1] : gradeRaw;
+
+    if (day && DAYS_ORDER.includes(day) && time) {
+      const key = `${day}-${time}`;
+      if (isWeekly) {
+        slotA[key] = (slotA[key] || 0) + 1;
+        slotB[key] = (slotB[key] || 0) + 1;
+      } else if (weekGroup.includes('A')) {
+        slotA[key] = (slotA[key] || 0) + 1;
+      } else if (weekGroup.includes('B')) {
+        slotB[key] = (slotB[key] || 0) + 1;
+      } else {
+        // 주차 구분 정보가 없으면 매주로 간주(보수적으로 양쪽 다 차지)
+        slotA[key] = (slotA[key] || 0) + 1;
+        slotB[key] = (slotB[key] || 0) + 1;
+      }
+    }
+
+    membersInTab.push({ cas, name: safeStr(row[3]), level: memberLevel, day, time, weekGroup, isWeekly });
+  }
+
+  // 탭 이름에서 레벨(학년)을 못 찾았으면 기존 회원들의 학년으로 추정 (그 방의 레벨 확정)
+  if (levels.length === 0) levels = deriveLevelsFromMembers(membersInTab);
+
+  // 가능 시간대 계산: A주/B주 인원을 각각 8명 미만으로 관리
+  const availableSlots = [];
+  DAYS_ORDER.forEach(day => {
+    TIME_SLOTS.forEach(time => {
+      const key = `${day}-${time}`;
+      const countA = slotA[key] || 0;
+      const countB = slotB[key] || 0;
+      const maxCount = Math.max(countA, countB);
+      const earlyOk = !EARLY_TIMES_SET.has(time) || maxCount > 0;
+      const available = (countA < 8 || countB < 8) && earlyOk;
+      availableSlots.push({ day, time, count: maxCount, countA, countB, available, isEarly: EARLY_TIMES_SET.has(time) });
+    });
+  });
+
+  return {
+    tabName, teacherName: info.teacherName, levels,
+    slotCount: { ...slotA },
+    availableSlots, membersInTab,
+    totalMembers: membersInTab.length
+  };
+}
+
+// ========== 파싱: 스케줄러 파일 ==========
+function parseSchedulerFile(wb) {
+  const teachers = [];
+
+  wb.SheetNames.forEach(tabName => {
+    const info = parseTabName(tabName);
+    if (!info) return;
+
+    const ws = wb.Sheets[tabName];
+    const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' });
+
+    // 레벨/학년: 탭 이름 괄호 안 숫자 (영어=레벨, 일반=학년)
+    let levels = info.levels;
+    if (levels.length === 0 && aoa[7]) {
+      const row8text = aoa[7].filter(v => v).join(' ');
+      levels = parseLevelText(row8text);
+    }
+
+    // genN(관리교사 N상품) 모드: A주/B주 + 매주 컬럼을 반영한 전용 파싱
+    if (currentMode === 'genN') {
+      teachers.push(parseTeacherTabGenN(tabName, info, levels, aoa));
+      return;
+    }
+
+    // 회원 목록 (행11 = index 10부터)
+    const slotCount = {}; // key: "요일-시간" → count (전체 인원, gen 모드용)
+    const slotWeekly = {}; // key: "요일-시간" → count (전과목/단과 등 매주 회원, eng/engJj 자주표 로직용)
+    const slotJajuA = {};  // key: "요일-시간" → 자주표 회원 중 A주 트랙 인원수
+    const slotJajuB = {};  // key: "요일-시간" → 자주표 회원 중 B주 트랙 인원수
+    const membersInTab = [];
+    const isEng = currentMode === 'eng' || currentMode === 'engJj';
+
+    for (let i = 10; i < aoa.length; i++) {
+      const row = aoa[i];
+      if (!row) continue;
+      const cas = safeStr(row[3]); // D열: 회원번호
+      if (!cas || isNaN(parseInt(cas))) continue;
+
+      const day = safeStr(row[8]);   // I열: 요일
+      const time = parseTime(row[9]); // J열: 시간
+
+      let jajuInfo = null;
+      if (day && DAYS_ORDER.includes(day) && time) {
+        const key = `${day}-${time}`;
+        slotCount[key] = (slotCount[key] || 0) + 1;
+
+        if (isEng) {
+          // 그룹영어 한정: 이미 이 방에 들어가 있는 회원이 자주표(자기주도표)인지,
+          // 자주표라면 A주/B주 중 어느 트랙인지 ★배정 파일 전체 인덱스로 역조회
+          const info2 = fullMemberIndex.get(cas);
+          if (info2 && info2.isJaju) {
+            jajuInfo = info2;
+            if (info2.abWeek === 'A주') slotJajuA[key] = (slotJajuA[key] || 0) + 1;
+            else if (info2.abWeek === 'B주') slotJajuB[key] = (slotJajuB[key] || 0) + 1;
+            else {
+              // 첫수업주간 미확인 등으로 A/B 판별 불가 → 정원 초과 방지를 위해 양쪽 다 차지한 것으로 보수적 처리
+              slotJajuA[key] = (slotJajuA[key] || 0) + 1;
+              slotJajuB[key] = (slotJajuB[key] || 0) + 1;
+            }
+          } else {
+            slotWeekly[key] = (slotWeekly[key] || 0) + 1;
+          }
+        }
+      }
+
+      // 영어=레벨(H열 index7), 일반=학년(G열 index6)
+      const memberLevel = isEng ? safeStr(row[7]) : (() => {
+        const gr = safeStr(row[6]);
+        const gm = gr.match(/(\d+)/);
+        return gm ? gm[1] : gr;
+      })();
+
+      membersInTab.push({
+        cas, name: safeStr(row[4]),
+        level: memberLevel, day, time,
+        isJaju: !!(jajuInfo && jajuInfo.isJaju),
+        abWeek: jajuInfo ? jajuInfo.abWeek : null
+      });
+    }
+
+    // 탭 이름에서 레벨(학년)을 못 찾았으면 기존 회원들의 레벨/학년으로 추정 (그 방의 레벨 확정)
+    if (levels.length === 0) levels = deriveLevelsFromMembers(membersInTab);
+
+    // 가능 시간대 계산
+    const availableSlots = [];
+    if (isEng) {
+      // 그룹영어(eng/engJj): 전과목/단과(매주) 인원 + 자주표(격주) 인원을 A주/B주로 나눠서 관리.
+      // 실제 특정 날짜의 인원수 = 매주인원 + 그 날짜가 속한 주(A/B)의 자주표 인원 (각각 8명 미만이어야 함)
+      DAYS_ORDER.forEach(day => {
+        TIME_SLOTS.forEach(time => {
+          const key = `${day}-${time}`;
+          const weekly = slotWeekly[key] || 0;
+          const jajuA = slotJajuA[key] || 0;
+          const jajuB = slotJajuB[key] || 0;
+          const countA = weekly + jajuA;
+          const countB = weekly + jajuB;
+          const maxCount = Math.max(countA, countB);
+          const earlyOk = !EARLY_TIMES_SET.has(time) || maxCount > 0;
+          const available = (countA < 8 || countB < 8) && earlyOk;
+          availableSlots.push({ day, time, count: maxCount, weekly, jajuA, jajuB, countA, countB, available, isEarly: EARLY_TIMES_SET.has(time) });
+        });
+      });
+    } else {
+      DAYS_ORDER.forEach(day => {
+        TIME_SLOTS.forEach(time => {
+          const key = `${day}-${time}`;
+          const cnt = slotCount[key] || 0;
+          const earlyOk = !EARLY_TIMES_SET.has(time) || cnt > 0;
+          availableSlots.push({ day, time, count: cnt, available: cnt < 8 && earlyOk, isEarly: EARLY_TIMES_SET.has(time) });
+        });
+      });
+    }
+
+    teachers.push({
+      tabName, teacherName: info.teacherName, levels,
+      slotCount, availableSlots, membersInTab,
+      totalMembers: membersInTab.length
+    });
+  });
+
+  return teachers;
+}
+
+// ========== 매칭 ==========
+function matchAll(members, teachers) {
+  const assignedToSlot = {}; // "tabName-day-time" → count (추가 배정 포함)
+
+  return members.map(member => {
+    const levelNum = member.level ? parseInt(member.level) : null;
+    const levelStr = member.level ? String(member.level).trim() : null;
+
+    const matches = [];
+
+    teachers.forEach(teacher => {
+      // 레벨 매칭: 레벨 정보가 없으면 모든 교사 표시
+      let levelOk = true;
+      if (levelStr && teacher.levels.length > 0) {
+        levelOk = teacher.levels.some(l => {
+          if (typeof l === 'number') return l === levelNum;
+          return String(l) === levelStr;
+        });
+      }
+
+      // 화상코칭거부: 레벨만 비교, 시간 무시
+      if (member.videoRefused) {
+        if (levelOk) {
+          matches.push({ teacher, levelOk, availableSlots: [], hasSlots: true, videoRefused: true });
+        }
+        return;
+      }
+
+      const teacherSlots = [];
+      teacher.availableSlots.forEach(slot => {
+        if (!slot.available) return;
+
+        // 가능 요일 필터 (요일 정보가 있는 회원만 적용)
+        if (member.dayRestricted && !member.possibleDays.includes(slot.day)) return;
+
+        // 불가 시간 필터
+        if (member.blockedSlots.has(slot.time)) return;
+
+        const key = `${teacher.tabName}-${slot.day}-${slot.time}`;
+
+        if (currentMode === 'genN') {
+          // genN(관리교사 N상품): A주/B주 인원을 각각 8명 미만으로 관리
+          const extraA = assignedToSlot[key + '-A'] || 0;
+          const extraB = assignedToSlot[key + '-B'] || 0;
+          const cntA = slot.countA + extraA;
+          const cntB = slot.countB + extraB;
+          const okA = cntA < 8;
+          const okB = cntB < 8;
+
+          let assignedWeek = null, currentCount;
+          if (member.isBiweekly) {
+            // 격주(N) 회원: A주 또는 B주 중 자리가 있는 쪽에 배정 (자리가 더 많이 남은 쪽 우선)
+            if (!okA && !okB) return;
+            assignedWeek = (okA && okB) ? (cntA <= cntB ? 'A주' : 'B주') : (okA ? 'A주' : 'B주');
+            currentCount = assignedWeek === 'A주' ? cntA : cntB;
+          } else {
+            // 매주 회원: A주, B주 모두 자리가 있어야 함
+            if (!okA || !okB) return;
+            currentCount = Math.max(cntA, cntB);
+          }
+
+          teacherSlots.push({
+            day: slot.day, time: slot.time,
+            currentCount, countA: cntA, countB: cntB, assignedWeek,
+            key
+          });
+          return;
+        }
+
+        if (currentMode === 'eng' || currentMode === 'engJj') {
+          // 그룹영어: 전과목/단과(매주) + 자주표(자기주도표, 격주 A주/B주) 혼합 관리
+          const extraWeekly = assignedToSlot[key + '-weekly'] || 0;
+          const extraJajuA = assignedToSlot[key + '-jajuA'] || 0;
+          const extraJajuB = assignedToSlot[key + '-jajuB'] || 0;
+          const weekly = (slot.weekly || 0) + extraWeekly;
+          const jajuA = (slot.jajuA || 0) + extraJajuA;
+          const jajuB = (slot.jajuB || 0) + extraJajuB;
+
+          if (member.isJaju) {
+            // 자주표(격주) 신규 회원: 방 하나에 A주/B주 각각 최대 2명, 전체 정원은 8명
+            const capOkA = jajuA < 2 && (weekly + jajuA) < 8;
+            const capOkB = jajuB < 2 && (weekly + jajuB) < 8;
+            if (!capOkA && !capOkB) return;
+            // 첫수업주간 기준 자기 주(A/B)를 우선 시도, 자리가 없으면 반대 주로 배정(=1주 늦게 시작)
+            let assignedWeek, currentCount;
+            if (member.abWeek === 'A주' && capOkA) { assignedWeek = 'A주'; currentCount = weekly + jajuA; }
+            else if (member.abWeek === 'B주' && capOkB) { assignedWeek = 'B주'; currentCount = weekly + jajuB; }
+            else if (capOkA) { assignedWeek = 'A주'; currentCount = weekly + jajuA; }
+            else { assignedWeek = 'B주'; currentCount = weekly + jajuB; }
+
+            teacherSlots.push({
+              day: slot.day, time: slot.time,
+              currentCount, jajuA, jajuB, assignedWeek, isJaju: true,
+              key
+            });
+            return;
+          }
+
+          // 전과목/단과(매주) 신규 회원: 매주 참여하므로 A주/B주 두 트랙 모두 8명 미만이어야 함
+          const okA = (weekly + 1 + jajuA) <= 8;
+          const okB = (weekly + 1 + jajuB) <= 8;
+          if (!okA || !okB) return;
+          const currentCount = Math.max(weekly + jajuA, weekly + jajuB);
+          teacherSlots.push({
+            day: slot.day, time: slot.time,
+            currentCount, isJaju: false,
+            key
+          });
+          return;
+        }
+
+        // 추가 배정 반영
+        const extraCount = assignedToSlot[key] || 0;
+        if (slot.count + extraCount >= 8) return;
+
+        teacherSlots.push({
+          day: slot.day, time: slot.time,
+          currentCount: slot.count + extraCount,
+          key
+        });
+      });
+
+      if (levelOk && teacherSlots.length > 0) {
+        matches.push({
+          teacher, levelOk,
+          availableSlots: teacherSlots,
+          hasSlots: teacherSlots.length > 0
+        });
+      }
+    });
+
+    // 첫 번째 가능 슬롯에 임시 배정 마킹 (한 회원이 여러 탭에 중복 배정 안 되도록)
+    // (실제 배정은 사용자가 결정, 여기서는 display용)
+
+    return { member, matches };
+  });
+}
+
+// ========== 메인 처리 ==========
+async function processFiles() {
+  if (!currentMode) {
+    alert('교사 유형을 선택하세요!\n(그룹영어 또는 그룹일반)');
+    return;
+  }
+  const btn = document.getElementById('btnProcess');
+  btn.disabled = true;
+  setProgress(10);
+
+  // 새로 비교를 실행하면 이전 임의 배정 결과는 초기화
+  lastRandomAssign = null;
+  const raEl = document.getElementById('randomAssignResult');
+  if (raEl) { raEl.innerHTML = ''; raEl.style.display = 'none'; }
+
+  try {
+    document.getElementById('processStatus').textContent = '⏳ 배정 회원 분석 중...';
+    await sleep(50);
+    fullMemberIndex = buildFullMemberIndex(wb1);
+    membersData = parseAssignmentFile(wb1);
+    setProgress(40);
+
+    document.getElementById('processStatus').textContent = '⏳ 교사 스케줄 분석 중...';
+    await sleep(50);
+    teachersData = parseSchedulerFile(wb2);
+    setProgress(70);
+
+    document.getElementById('processStatus').textContent = '⏳ 매칭 중...';
+    await sleep(50);
+    matchResults = matchAll(membersData, teachersData);
+    setProgress(90);
+
+    await sleep(50);
+    renderResults();
+    setProgress(100);
+
+    document.getElementById('processStatus').textContent = `✅ 완료! 배정 필요 ${membersData.length}명 / 활성 교사 ${teachersData.length}명`;
+    document.getElementById('processStatus').style.color = 'var(--green)';
+
+  } catch(err) {
+    document.getElementById('processStatus').textContent = '❌ 오류: ' + err.message;
+    document.getElementById('processStatus').style.color = 'var(--red)';
+    console.error(err);
+    btn.disabled = false;
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function setProgress(p) {
+  document.getElementById('progressWrap').className = 'progress-wrap show';
+  document.getElementById('progressFill').style.width = p + '%';
+}
+
+// ========== 렌더링 ==========
+function renderResults() {
+  document.getElementById('resultsArea').style.display = 'block';
+  renderSummary();
+  renderMemberTable();
+  renderEarlyMembers();
+  renderTeacherPanels();
+  populateLevelFilter();
+  showGuidelinesBox();
+  document.getElementById('resultsArea').scrollIntoView({ behavior:'smooth' });
+}
+
+function showGuidelinesBox() {
+  const gl = document.getElementById('guidelines').value.trim();
+  const box = document.getElementById('guidelinesDisplay');
+  if (gl) {
+    document.getElementById('guidelinesText').textContent = gl;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function renderSummary() {
+  const totalSlots = teachersData.reduce((s, t) => s + t.availableSlots.filter(sl => sl.available).length, 0);
+  const withMatch = matchResults.filter(r => r.matches.some(m => m.hasSlots)).length;
+  const noMatch = matchResults.length - withMatch;
+
+  document.getElementById('summaryCard').innerHTML = `
+    <div class="section-title">📊 요약</div>
+    <div class="stat-row">
+      <div class="stat-chip">📋 배정 필요 회원: <strong>${membersData.length}명</strong></div>
+      <div class="stat-chip green">✅ 매칭 가능: <strong>${withMatch}명</strong></div>
+      ${noMatch > 0 ? `<div class="stat-chip yellow">⚠️ 매칭 어려움: <strong>${noMatch}명</strong></div>` : ''}
+      <div class="stat-chip">👩‍🏫 분석 교사: <strong>${teachersData.length}명</strong></div>
+      <div class="stat-chip">🕐 전체 가능 슬롯: <strong>${totalSlots}개</strong></div>
+    </div>
+  `;
+}
+
+function populateLevelFilter() {
+  const levels = new Set();
+  membersData.forEach(m => { if (m.level) levels.add(m.level); });
+  const sel = document.getElementById('filterLevel');
+  sel.innerHTML = '<option value="">전체</option>';
+  [...levels].sort().forEach(l => {
+    sel.innerHTML += `<option value="${l}">Lv ${l}</option>`;
+  });
+}
+
+function applyFilters() {
+  const lvFilter = document.getElementById('filterLevel').value;
+  const dayFilter = document.getElementById('filterDay').value;
+  const searchFilter = document.getElementById('filterSearch').value.toLowerCase();
+  renderMemberTable(lvFilter, dayFilter, searchFilter);
+}
+
+function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
+  const filtered = matchResults.filter(r => {
+    const m = r.member;
+    if (lvFilter && m.level !== lvFilter) return false;
+    if (dayFilter && !m.possibleDays.includes(dayFilter)) return false;
+    if (searchFilter) {
+      const text = (m.cas + m.name + m.note).toLowerCase();
+      if (!text.includes(searchFilter)) return false;
+    }
+    return true;
+  });
+
+  const levelLabel = currentMode === 'eng' ? '레벨' : '학년(배정용)';
+  let html = `<table>
+    <thead><tr>
+      <th>#</th><th>첫수업주간</th><th>CAS번호</th><th>학년(원본)</th>
+      <th>${levelLabel}</th><th>가능 일정(수기_AJ열)</th>
+      <th>매칭 가능 교사/시간</th><th>불가능시간(설문 답변)</th><th>특이사항</th><th>형제</th>
+    </tr></thead><tbody>`;
+
+  if (filtered.length === 0) {
+    html += `<tr><td colspan="10" class="no-data">해당 조건의 회원이 없습니다.</td></tr>`;
+  }
+
+  filtered.forEach((r, idx) => {
+    const m = r.member;
+    const matches = r.matches.filter(mt => mt.hasSlots);
+
+    // 가능 슬롯 요약 (최대 5개)
+    let slotsHtml = '';
+    if (m.videoRefused) {
+      const teachers = r.matches.filter(mt => mt.levelOk).map(mt => mt.teacher.teacherName);
+      slotsHtml = '<span class="badge badge-yellow">화상코칭거부</span> '
+        + (teachers.length > 0
+          ? teachers.map(t => `<span class='badge badge-blue'>${t}</span>`).join(' ')
+          : '<span class="badge badge-red">레벨 매칭 없음</span>');
+    } else if (matches.length === 0) {
+      slotsHtml = '<span class="badge badge-red">매칭 없음</span>';
+    } else {
+      const allSlots = [];
+      matches.forEach(mt => {
+        mt.availableSlots.slice(0, 3).forEach(sl => {
+          allSlots.push({ teacher: mt.teacher.teacherName, tab: mt.teacher.tabName, ...sl });
+        });
+      });
+      const display = allSlots.slice(0, 6);
+      slotsHtml = '<div class="slot-list">' + display.map(sl => {
+        const cls = sl.currentCount >= 7 ? 'slot-item warn' : 'slot-item';
+        const weekTag = sl.assignedWeek ? `<span class="badge badge-blue">${sl.assignedWeek}</span> ` : '';
+        return `<div class="${cls}">
+          <strong>${sl.teacher}</strong>
+          <span>${sl.day} ${sl.time}</span>
+          ${weekTag}<span class="badge badge-gray">${sl.currentCount}/8명</span>
+        </div>`;
+      }).join('') + (allSlots.length > 6 ? `<div style="font-size:11px;color:var(--text-muted)">+${allSlots.length-6}개 더...</div>` : '') + '</div>';
+    }
+
+    // 형제 정보
+    const broHtml = getBroHtml(m);
+
+    const levelBadge = m.level
+      ? `<span class="badge badge-yellow">Lv ${m.level}</span>`
+      : '<span class="badge badge-gray">미확인</span>';
+    // genN 모드: 격주(N)/매주 코칭주기 표시 / eng·engJj 모드: 자주표(격주)·전과목단과(매주) 코칭구분 표시
+    let cycleBadge = '';
+    if (currentMode === 'genN') {
+      cycleBadge = m.isBiweekly ? '<span class="badge badge-blue">격주(N)</span>' : '<span class="badge badge-gray">매주</span>';
+    } else if (isEngJajuMode()) {
+      cycleBadge = m.isJaju ? '<span class="badge badge-blue">자주표</span>' : '<span class="badge badge-gray">전과목·단과</span>';
+    }
+    // 학년이 초등6/예비초인 경우 영어교사가 관리교사를 겸함 (안내 배지)
+    const mgrBadge = m.engIsAlsoMgr ? '<span class="badge badge-yellow">관리교사겸함</span>' : '';
+
+    html += `<tr>
+      <td>${idx+1}</td>
+      <td style="white-space:nowrap">${m.firstWeek ? fmtDate(m.firstWeek) : '<span class="badge badge-gray">미입력</span>'}</td>
+      <td><code>${m.cas}</code></td>
+
+      <td>${m.grade || '-'}${mgrBadge ? `<br>${mgrBadge}` : ''}</td>
+      <td><div style="width:58px">${levelBadge}${cycleBadge ? `<br>${cycleBadge}` : ''}</div></td>
+      <td style="max-width:180px;font-size:12px">${m.possibleScheduleRaw || '<span style="color:var(--text-muted)">-</span>'}</td>
+      <td style="min-width:200px">${slotsHtml}</td>
+      <td style="max-width:280px;font-size:12px;white-space:pre-line">${m.unavailDisplay || '-'}</td>
+      <td style="max-width:240px;font-size:12px">${m.note || '-'}</td>
+      <td>${broHtml}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('memberTableWrap').innerHTML = html;
+}
+
+// ========== 이른 시간대(3~5시) 회원 섹션 ==========
+function renderEarlyMembers() {
+  const earlyHours = new Set(['3:00','3:30','4:00','4:30']);
+  const earlyMembers = matchResults.filter(r => {
+    const m = r.member;
+    // 가능일정(AJ) 텍스트에서 3시/4시 포함 여부
+    const txt = m.possibleScheduleRaw || '';
+    const has3or4 = /3시|4시|3:00|4:00|3~|~4/.test(txt) || m.blockedSlots.size >= 4;
+    // 불가 슬롯이 없는 이른 시간이 있는 회원 (5시 이후 전부 불가)
+    const allLateBlocked = ['5:00','5:30','6:00','6:30','7:00','7:30','8:00','8:30'].every(t => m.blockedSlots.has(t));
+    return allLateBlocked;
+  });
+
+  const el = document.getElementById('earlyMembersSection');
+  if (!el) return;
+
+  if (earlyMembers.length === 0) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'block';
+  let html = `<div class='section-title'>⏰ 이른 시간대(3~5시) 전용 회원 (${earlyMembers.length}명)</div>`;
+  html += '<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr>'
+    + '<th>#</th><th>CAS</th><th>학년</th><th>레벨</th><th>수업주차</th><th>가능 일정(수기_AJ열)</th><th>매칭 교사</th><th>특이사항</th>'
+    + '</tr></thead><tbody>';
+  earlyMembers.forEach((r, i) => {
+    const m = r.member;
+    const slots = r.matches.filter(mt => mt.hasSlots)
+      .map(mt => `<span class='badge badge-orange'>${mt.teacher.teacherName}</span>`).join(' ');
+    html += `<tr>
+      <td>${i+1}</td><td><code>${m.cas}</code></td>
+      <td>${m.grade||'-'}</td>
+      <td>${m.level?`<span class='badge badge-yellow'>Lv${m.level}</span>`:'-'}</td>
+      <td style="white-space:nowrap">${firstWeekCell(m)}</td>
+      <td style='max-width:160px'>${m.possibleScheduleRaw||'-'}</td>
+      <td>${slots||'<span class=\'badge badge-red\'>없음</span>'}</td>
+      <td>${m.note||'-'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+function renderTeacherPanels() {
+  let html = '';
+
+  teachersData.forEach(teacher => {
+    // 이 교사에게 배정 가능한 회원들
+    const assignable = matchResults.filter(r =>
+      r.matches.some(m => m.teacher.tabName === teacher.tabName && m.hasSlots)
+    );
+
+    const levelTags = teacher.levels.length > 0
+      ? teacher.levels.map(l => `<span class="badge badge-yellow">Lv${l}</span>`).join(' ')
+      : '<span class="badge badge-gray">레벨 미확인</span>';
+
+    // 가능 시간대 표 (8명 미만 슬롯만)
+    const availSlots = teacher.availableSlots.filter(s => s.available);
+    const slotsByDay = {};
+    availSlots.forEach(s => {
+      if (!slotsByDay[s.day]) slotsByDay[s.day] = [];
+      slotsByDay[s.day].push(s);
+    });
+
+    let slotTable;
+    if (availSlots.length === 0) {
+      slotTable = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0">가능한 시간대가 없습니다 (전체 마감)</div>';
+    } else {
+      slotTable = '<div style="overflow-x:auto"><table style="font-size:12px;width:auto">';
+      slotTable += '<thead><tr><th>시간</th>' + DAYS_ORDER.filter(d => slotsByDay[d]).map(d => `<th>${d}</th>`).join('') + '</tr></thead><tbody>';
+      TIME_SLOTS.forEach(time => {
+        let row = `<td style="font-weight:600;white-space:nowrap">${time}</td>`;
+        const days = DAYS_ORDER.filter(d => slotsByDay[d]);
+        days.forEach(day => {
+          const slot = (slotsByDay[day] || []).find(s => s.time === time);
+          if (slot) {
+            if (currentMode === 'genN' || (isEngJajuMode() && slot.countA !== undefined)) {
+              // A주/B주 인원을 각각 표시
+              const clsA = slot.countA >= 7 ? 'badge-red' : slot.countA >= 5 ? 'badge-yellow' : 'badge-green';
+              const clsB = slot.countB >= 7 ? 'badge-red' : slot.countB >= 5 ? 'badge-yellow' : 'badge-green';
+              row += `<td><span class="badge ${clsA}">A ${slot.countA}/8</span> <span class="badge ${clsB}">B ${slot.countB}/8</span></td>`;
+            } else {
+              const cls = slot.count >= 7 ? 'badge-red' : slot.count >= 5 ? 'badge-yellow' : 'badge-green';
+              row += `<td><span class="badge ${cls}">${slot.count}/8</span></td>`;
+            }
+          } else {
+            row += '<td>-</td>';
+          }
+        });
+        slotTable += `<tr>${row}</tr>`;
+      });
+      slotTable += '</tbody></table></div>';
+    }
+
+    html += `
+    <div class="teacher-section">
+      <div class="teacher-header">
+        <span class="teacher-name">👩‍🏫 ${teacher.teacherName}</span>
+        <div class="level-tags">${levelTags}</div>
+        <span class="badge badge-gray">현재 ${teacher.totalMembers}명</span>
+        <span class="badge ${assignable.length > 0 ? 'badge-green' : 'badge-gray'}">배정가능 ${assignable.length}명</span>
+      </div>
+      <details>
+        <summary>가능 시간대 보기 (${availSlots.length}개 슬롯)</summary>
+        <div>${slotTable}</div>
+      </details>
+      <details style="margin-top:6px">
+        <summary>배정 가능 회원 (${assignable.length}명)</summary>
+        <div>
+          <table style="font-size:12px">
+            <thead><tr><th>#</th><th>CAS</th><th>레벨</th><th>수업주차</th>${(currentMode === 'genN' || isEngJajuMode()) ? `<th>${currentMode === 'genN' ? '코칭주기' : '코칭구분'}</th>` : ''}<th>가능 일정(수기_AJ열)</th><th>교사 가능시간</th><th>불가능시간(설문 답변)</th><th>특이사항</th><th>형제</th></tr></thead>
+            <tbody>
+              ${assignable.length === 0 ? `<tr><td colspan="${(currentMode === 'genN' || isEngJajuMode()) ? 10 : 9}" style="text-align:center;color:var(--text-muted)">해당 없음</td></tr>` :
+                assignable.map((r, i) => {
+                  const m = r.member;
+                  const mt = r.matches.find(mt2 => mt2.teacher.tabName === teacher.tabName && mt2.hasSlots);
+                  let cycleCell = '';
+                  if (currentMode === 'genN') {
+                    const week = mt && mt.availableSlots[0] ? mt.availableSlots[0].assignedWeek : null;
+                    cycleCell = `<td style="width:70px">${m.isBiweekly ? `격주(N)${week ? ` / ${week}` : ''}` : '매주'}</td>`;
+                  } else if (isEngJajuMode()) {
+                    const week = mt && mt.availableSlots[0] ? mt.availableSlots[0].assignedWeek : null;
+                    cycleCell = `<td style="width:80px">${jajuCycleLabel(m, week)}</td>`;
+                  }
+                  const slotStr = m.videoRefused
+                    ? '화상코칭거부'
+                    : (mt ? mt.availableSlots.slice(0,5).map(s=>`${s.day} ${s.time}${s.assignedWeek ? ' '+s.assignedWeek : ''} (${s.currentCount}/8)`).join('<br>') : '-');
+                  return `<tr>
+                    <td>${i+1}</td>
+                    <td><code>${m.cas}</code></td>
+                    <td><div style="width:58px">${m.level ? `<span class="badge badge-yellow">Lv${m.level}</span>` : '-'}</div></td>
+                    <td style="white-space:nowrap;font-size:12px">${firstWeekCell(m)}</td>
+                    ${cycleCell}
+                    <td style="max-width:150px">${m.possibleScheduleRaw || '-'}</td>
+                    <td style="font-size:12px;white-space:nowrap">${slotStr || '-'}</td>
+                    <td style="max-width:280px;white-space:pre-line">${m.unavailDisplay || '-'}</td>
+                    <td style="max-width:240px">${m.note || '-'}</td>
+                    <td>${getBroHtml(m)}</td>
+                  </tr>`;
+                }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--gray-border);margin:12px 0">`;
+  });
+
+  document.getElementById('teacherPanels').innerHTML = html || '<div class="no-data"><div class="big">👩‍🏫</div>교사 데이터를 불러올 수 없습니다.</div>';
+}
+
+// ========== N명 임의 배정 ==========
+function randomAssign() {
+  if (!matchResults || matchResults.length === 0) {
+    alert('먼저 비교를 실행하세요.'); return;
+  }
+  // 인원수를 입력하지 않으면 상한 없이(가능한 만큼) 끝까지 고루 배정,
+  // 입력하면 교사당 최대 n명까지 배정 (회원이 충분한 교사는 n명 그대로,
+  // 부족한 교사는 가능한 만큼만 배정되어 자연히 고루 분배됨)
+  const nRaw = document.getElementById('nPerTeacher').value.trim();
+  const hasLimit = nRaw !== '';
+  const n = hasLimit ? (parseInt(nRaw) || 5) : Infinity;
+  const used = new Set();
+  const perTeacher = {};
+  teachersData.forEach(teacher => {
+    perTeacher[teacher.tabName] = { teacher, picked: [] };
+  });
+
+  // 회원/교사 순서를 무작위로 섞은 뒤, 라운드 로빈 방식으로 교사당 최대 n명까지 배정
+  // → 회원 수가 부족해도 특정 교사에게 몰리지 않고 고루 배정됨
+  const shuffledMembers = matchResults.slice().sort(() => Math.random() - 0.5);
+  const shuffledTeachers = teachersData.slice().sort(() => Math.random() - 0.5);
+
+  // 0. 우선 배정: "딱 맞는"(마감임박, 7/8 → 이 회원 배정 시 8/8 완성) 매칭이 있는 회원은
+  //    라운드로빈보다 먼저 배정해 마감 기회를 놓치지 않도록 함
+  matchResults.forEach(r => { r._exactFitPicked = false; });
+  shuffledMembers.forEach(r => {
+    if (used.has(r.member.cas)) return;
+    if (!hasExactFitMatch(r.matches)) return;
+    // 7/8 슬롯이 있는 매칭 교사 중, 아직 자리(n)가 남은 교사를 우선 선택
+    const mt = r.matches.find(mt2 =>
+      mt2.hasSlots && !mt2.videoRefused &&
+      mt2.availableSlots.some(isExactFitSlot) &&
+      perTeacher[mt2.teacher.tabName].picked.length < n
+    );
+    if (!mt) return;
+    used.add(r.member.cas);
+    perTeacher[mt.teacher.tabName].picked.push(r);
+    r._exactFitPicked = true;
+  });
+
+  for (let round = 0; round < n; round++) {
+    let progress = false;
+    shuffledTeachers.forEach(teacher => {
+      if (perTeacher[teacher.tabName].picked.length >= n) return;
+      const candidate = shuffledMembers.find(r =>
+        !used.has(r.member.cas) &&
+        r.matches.some(m => m.teacher.tabName === teacher.tabName && m.hasSlots)
+      );
+      if (candidate) {
+        used.add(candidate.member.cas);
+        perTeacher[teacher.tabName].picked.push(candidate);
+        progress = true;
+      }
+    });
+    if (!progress) break; // 더 이상 배정할 수 있는 회원이 없으면 종료 (인원수 미입력 시 무한루프 방지)
+  }
+
+  const unassigned = matchResults.filter(r => !used.has(r.member.cas));
+
+  // 엑셀 다운로드용으로 결과 저장
+  lastRandomAssign = { n: hasLimit ? n : null, perTeacher, unassigned };
+
+  // 렌더링
+  const el = document.getElementById('randomAssignResult');
+  if (!el) return;
+  let html = hasLimit
+    ? `<div class='section-title'>🎲 임의 배정 결과 (교사당 최대 ${n}명, 부족하면 고루 배정)</div>`
+    : `<div class='section-title'>🎲 임의 배정 결과 (인원수 미입력 - 가능한 회원 전체를 고루 배정)</div>`;
+  html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🔶 표시는 마감임박(7/8) 자리를 채우는 우선 배정 회원입니다.</div>`;
+  Object.values(perTeacher).forEach(({ teacher, picked }) => {
+    if (picked.length === 0) return;
+    html += `<div class='random-teacher-block'>`
+      + `<div class='random-teacher-name'>👩‍🏫 ${teacher.teacherName} — ${picked.length}명 배정</div>`
+      + '<div style="overflow-x:auto"><table style="font-size:12px;width:auto">'
+      + `<thead><tr><th>#</th><th>CAS</th><th>레벨</th><th>수업주차</th>${(currentMode === 'genN' || isEngJajuMode()) ? `<th>${currentMode === 'genN' ? '코칭주기/배정주차' : '코칭구분/배정주차'}</th>` : ''}<th>가능 일정(수기_AJ열)</th><th>불가능시간(설문 답변)</th><th>교사 가능시간</th><th>특이사항</th><th>형제</th></tr></thead><tbody>`;
+    picked.forEach((r, i) => {
+      const m = r.member;
+      const mt = r.matches.find(mt2 => mt2.teacher.tabName === teacher.tabName && mt2.hasSlots);
+      const slotStr = mt
+        ? mt.availableSlots.slice(0,5).map(s=>`${s.day} ${s.time}${s.assignedWeek ? ' '+s.assignedWeek : ''} (${s.currentCount}/8)`).join('<br>')
+        : '-';
+      let cycleCell = '';
+      if (currentMode === 'genN') {
+        const week = mt && mt.availableSlots[0] ? mt.availableSlots[0].assignedWeek : null;
+        cycleCell = `<td style="width:70px">${m.isBiweekly ? `격주(N)${week ? ` / ${week}` : ''}` : '매주'}</td>`;
+      } else if (isEngJajuMode()) {
+        const week = mt && mt.availableSlots[0] ? mt.availableSlots[0].assignedWeek : null;
+        cycleCell = `<td style="width:80px">${jajuCycleLabel(m, week)}</td>`;
+      }
+      const exactFitTag = r._exactFitPicked ? ` <span class="badge badge-yellow">🔶마감임박</span>` : '';
+      html += `<tr><td>${i+1}</td><td><code>${m.cas}</code>${exactFitTag}</td>`
+        + `<td style="width:70px">${m.level||'-'}</td>`
+        + `<td style="white-space:nowrap;font-size:12px">${firstWeekCell(m)}</td>`
+        + cycleCell
+        + `<td style="max-width:150px;font-size:12px">${m.possibleScheduleRaw||'-'}</td>`
+        + `<td style="max-width:260px;font-size:12px;white-space:pre-line">${m.unavailDisplay||'-'}</td>`
+        + `<td style="font-size:12px;white-space:nowrap">${slotStr||'-'}</td>`
+        + `<td style="max-width:220px;font-size:12px">${m.note||'-'}</td>`
+        + `<td>${getBroHtml(m)}</td></tr>`;
+    });
+    html += '</tbody></table></div></div>';
+  });
+
+  // 미배정 회원 목록
+  if (unassigned.length > 0) {
+    html += `<div class='section-title' style='margin-top:16px'>⚠️ 미배정 회원 (${unassigned.length}명)</div>`;
+    html += '<div style="overflow-x:auto"><table style="font-size:12px;width:auto">'
+      + '<thead><tr><th>#</th><th>CAS</th><th>레벨</th><th>수업주차</th><th>가능 일정(수기_AJ열)</th><th>불가능시간(설문 답변)</th><th>특이사항</th><th>형제</th></tr></thead><tbody>';
+    unassigned.forEach((r, i) => {
+      const m = r.member;
+      html += `<tr><td>${i+1}</td><td><code>${m.cas}</code></td>`
+        + `<td style="width:70px">${m.level||'-'}</td>`
+        + `<td style="white-space:nowrap;font-size:12px">${firstWeekCell(m)}</td>`
+        + `<td style="max-width:150px;font-size:12px">${m.possibleScheduleRaw||'-'}</td>`
+        + `<td style="max-width:260px;font-size:12px;white-space:pre-line">${m.unavailDisplay||'-'}</td>`
+        + `<td style="max-width:220px;font-size:12px">${m.note||'-'}</td>`
+        + `<td>${getBroHtml(m)}</td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
+  el.innerHTML = html;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior:'smooth' });
+}
+
+// ========== 탭 전환 ==========
+function switchTab(panelId, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(panelId).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ========== 엑셀 다운로드 ==========
+function downloadExcel() {
+  const wb = XLSX.utils.book_new();
+  const guidelines = document.getElementById('guidelines').value.trim();
+
+  // 요약 시트
+  const summaryData = [
+    ['C2 장경숙팀 영어 회원 배정 결과'],
+    ['생성일시', new Date().toLocaleString('ko-KR')],
+    [''],
+    ['[추가 지침]'],
+    [guidelines || '(없음)'],
+    [''],
+    ['배정 필요 총 회원수', membersData.length + '명'],
+    ['분석 교사수', teachersData.length + '명'],
+    [''],
+    ['[기본 지침]'],
+    ['- 영어교사>배정교사 비어있고 배정일에 청철/보류/확인중 없는 회원 대상'],
+    ['- 첫 수업 주간 빠른 순 정렬'],
+    ['- 탭명 괄호 안 숫자 = 담당 레벨'],
+    ['- 레벨 일치하는 교사 탭과 비교'],
+    ['- 정각/30분 단위 참여인원 8명 이하'],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(wb, wsSummary, '요약');
+
+  // 회원 전체 시트
+  const isGenN = currentMode === 'genN';
+  const isEngJaju = isEngJajuMode();
+  const hasCycleCol = isGenN || isEngJaju;
+  const cycleColName = isGenN ? '코칭주기' : (isEngJaju ? '코칭구분' : '');
+  // 코칭구분(격주(N)/매주, 자주표/전과목·단과) 텍스트 - 특정 슬롯 없이 회원 자체의 구분만
+  function cycleCategoryText(m) {
+    if (isGenN) return m.isBiweekly ? '격주(N)' : '매주';
+    if (isEngJaju) return m.isJaju ? '자주표' : '전과목·단과';
+    return '';
+  }
+  // 코칭구분 + 배정된 주(A주/B주) 텍스트 - 매칭된 특정 슬롯이 있을 때
+  function cycleCategoryTextWithWeek(m, week) {
+    if (isGenN) return m.isBiweekly ? `격주(N)${week ? ` / ${week}` : ''}` : '매주';
+    if (isEngJaju) return jajuCycleLabel(m, week);
+    return '';
+  }
+  const memberHeader = [
+    '순번','CAS회원번호','학년','레벨', ...(hasCycleCol ? [cycleColName] : []),
+    ...(isEngJaju ? ['관리교사겸함'] : []), '첫수업주간',
+    '가능요일','가능 일정(수기_AJ열)','불가능시간(설문 답변)',
+    '특이사항','형제여부',
+    '형제CAS','형제이름','형제관리교사','형제영어교사',
+    '추천교사1','추천시간1','현재인원1',
+    '추천교사2','추천시간2','현재인원2',
+    '추천교사3','추천시간3','현재인원3'
+  ];
+  const memberSlotsInfo = [];
+  const memberRows = matchResults.map((r, idx) => {
+    const m = r.member;
+    const slots = [];
+    r.matches.forEach(mt => {
+      mt.availableSlots.forEach(sl => {
+        slots.push({ teacher: mt.teacher.teacherName, day: sl.day, time: sl.time, count: sl.currentCount, week: sl.assignedWeek });
+      });
+    });
+    memberSlotsInfo.push(slots);
+    const fmtSlot = sl => sl ? `${sl.day} ${sl.time}${sl.week ? ` (${sl.week})` : ''}` : '';
+    return [
+      idx+1, m.cas, m.grade, m.level,
+      ...(hasCycleCol ? [cycleCategoryText(m)] : []),
+      ...(isEngJaju ? [m.engIsAlsoMgr ? 'O' : ''] : []),
+      m.firstWeek ? fmtDate(m.firstWeek) : '',
+      m.possibleDays.join(','), m.possibleScheduleRaw, m.unavailDisplay,
+      m.note,
+      m.brotherFlag === 'Y' ? 'Y' : (m.broInfo ? 'Y' : ''),
+      m.broInfo?.cas||'', m.broInfo?.name||'',
+      m.broInfo?.mgrTeacher||'', m.broInfo?.engTeacher||'',
+      slots[0]?.teacher||'', fmtSlot(slots[0]), slots[0] ? `${slots[0].count}/8` : '',
+      slots[1]?.teacher||'', fmtSlot(slots[1]), slots[1] ? `${slots[1].count}/8` : '',
+      slots[2]?.teacher||'', fmtSlot(slots[2]), slots[2] ? `${slots[2].count}/8` : '',
+    ];
+  });
+  const wsMembers = XLSX.utils.aoa_to_sheet([memberHeader, ...memberRows]);
+  wsMembers['!cols'] = memberHeader.map(() => ({wch:14}));
+  // 마감임박(7/8 → 배정 시 8/8 완성) 추천 슬롯 노란색 강조
+  const recBaseIdx = memberHeader.indexOf('추천교사1');
+  if (recBaseIdx >= 0) {
+    memberSlotsInfo.forEach((slots, rIdx) => {
+      for (let i = 0; i < 3; i++) {
+        if (slots[i] && slots[i].count >= EXACT_FIT_COUNT) {
+          for (let c = 0; c < 3; c++) {
+            const addr = XLSX.utils.encode_cell({ r: rIdx + 1, c: recBaseIdx + i*3 + c });
+            if (wsMembers[addr]) wsMembers[addr].s = XLSX_YELLOW_FILL;
+          }
+        }
+      }
+    });
+  }
+  XLSX.utils.book_append_sheet(wb, wsMembers, '배정필요회원전체');
+
+  // 배정불가 회원 시트 (매칭 가능한 교사/시간이 전혀 없는 회원 - 임의배정 여부와 무관하게 항상 표시)
+  const unassignableMembers = matchResults.filter(isUnassignable);
+  const ulHeader = [
+    '순번','CAS회원번호','학년','레벨', ...(hasCycleCol ? [cycleColName] : []), '수업주차',
+    '가능 일정(수기_AJ열)','불가능시간(설문 답변)','특이사항','형제정보'
+  ];
+  const ulRows = unassignableMembers.map((r, i) => {
+    const m = r.member;
+    return [
+      i+1, m.cas, m.grade, m.level,
+      ...(hasCycleCol ? [cycleCategoryText(m)] : []),
+      firstWeekCell(m), m.possibleScheduleRaw, m.unavailDisplay, m.note, getBroStr(m)
+    ];
+  });
+  if (ulRows.length === 0) ulRows.push(['배정 불가 회원 없음']);
+  const wsUnassignable = XLSX.utils.aoa_to_sheet([ulHeader, ...ulRows]);
+  wsUnassignable['!cols'] = ulHeader.map(() => ({wch:16}));
+  XLSX.utils.book_append_sheet(wb, wsUnassignable, '배정불가회원');
+
+  // 임의배정 결과 / 미배정 회원 시트 (임의 배정을 실행한 경우)
+  if (lastRandomAssign) {
+    const raHeader = [
+      '교사','순번','CAS회원번호','레벨','수업주차', ...(hasCycleCol ? [`${cycleColName}/배정주차`] : []),
+      '가능 일정(수기_AJ열)','불가능시간(설문 답변)','교사 가능시간','마감임박',
+      '특이사항','형제정보'
+    ];
+    const raRows = [];
+    const raExactFit = [];
+    Object.values(lastRandomAssign.perTeacher).forEach(({ teacher, picked }) => {
+      picked.forEach((r, i) => {
+        const m = r.member;
+        const mt = r.matches.find(mt2 => mt2.teacher.tabName === teacher.tabName && mt2.hasSlots);
+        const slotStr = mt ? mt.availableSlots.slice(0,3).map(s=>`${s.day} ${s.time}`).join(', ') : '';
+        const week = mt && mt.availableSlots[0] ? mt.availableSlots[0].assignedWeek : null;
+        const isExactFit = !!r._exactFitPicked;
+        raExactFit.push(isExactFit);
+        raRows.push([
+          teacher.teacherName, i+1, m.cas, m.level, firstWeekCell(m),
+          ...(hasCycleCol ? [cycleCategoryTextWithWeek(m, week)] : []),
+          m.possibleScheduleRaw, m.unavailDisplay, slotStr, isExactFit ? 'O' : '',
+          m.note, getBroStr(m)
+        ]);
+      });
+    });
+    if (raRows.length === 0) raRows.push(['임의 배정된 회원 없음']);
+    const wsRandom = XLSX.utils.aoa_to_sheet([raHeader, ...raRows]);
+    wsRandom['!cols'] = raHeader.map(() => ({wch:16}));
+    // 마감임박(7/8) 우선 배정 행 노란색 강조
+    raExactFit.forEach((isExactFit, rIdx) => {
+      if (!isExactFit) return;
+      raHeader.forEach((_, c) => {
+        const addr = XLSX.utils.encode_cell({ r: rIdx + 1, c });
+        if (wsRandom[addr]) wsRandom[addr].s = XLSX_YELLOW_FILL;
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, wsRandom, '임의배정결과');
+
+    // 미배정 회원
+    const unHeader = [
+      '순번','CAS회원번호','레벨','수업주차', ...(hasCycleCol ? [cycleColName] : []),
+      '가능 일정(수기_AJ열)','불가능시간(설문 답변)','특이사항','형제정보'
+    ];
+    const unRows = lastRandomAssign.unassigned.map((r, i) => {
+      const m = r.member;
+      return [i+1, m.cas, m.level, firstWeekCell(m), ...(hasCycleCol ? [cycleCategoryText(m)] : []), m.possibleScheduleRaw, m.unavailDisplay, m.note, getBroStr(m)];
+    });
+    if (unRows.length === 0) unRows.push(['미배정 회원 없음']);
+    const wsUnassigned = XLSX.utils.aoa_to_sheet([unHeader, ...unRows]);
+    wsUnassigned['!cols'] = unHeader.map(() => ({wch:16}));
+    XLSX.utils.book_append_sheet(wb, wsUnassigned, '미배정회원');
+  }
+
+  // 교사 탭별 시트
+  teachersData.forEach(teacher => {
+    const safeTabName = teacher.tabName.replace(/[\\/\[\]*?:]/g,'').slice(0, 30);
+    const assignable = matchResults.filter(r =>
+      r.matches.some(m => m.teacher.tabName === teacher.tabName && m.hasSlots)
+    );
+
+    const header = [
+      'CAS회원번호','학년','레벨','수업주차','상품','단과여부', ...(hasCycleCol ? [`${cycleColName}/배정주차`] : []),
+      ...(isEngJaju ? ['관리교사겸함'] : []),
+      '가능 시간 조합(현재인원)',
+      '탭명','현재탭가능시간대',
+      '가능 일정(수기_AJ열)','불가능시간(설문 답변)','특이사항','형제정보'
+    ];
+
+    const rows = [];
+    const exactFitFlags = [];
+    assignable.forEach(r => {
+      const m = r.member;
+      const mt = r.matches.find(mt2 => mt2.teacher.tabName === teacher.tabName);
+      const avSlots = mt ? mt.availableSlots : [];
+
+      // 현재 탭 가능 시간대
+      const teacherAvail = teacher.availableSlots.filter(s => s.available);
+      const teacherAvailStr = DAYS_ORDER.map(d => {
+        const ts = teacherAvail.filter(s => s.day === d);
+        if (ts.length === 0) return '';
+        return `${d}: ${ts.map(s => s.time).join(',')}`;
+      }).filter(Boolean).join(' | ');
+
+      // 이 회원에게 맞는 가능 시간
+      const matchedStr = avSlots.map(sl => `${sl.day}${sl.time}(${sl.currentCount}/8${sl.assignedWeek ? ' ' + sl.assignedWeek : ''})`).join(', ');
+      exactFitFlags.push(avSlots.some(isExactFitSlot));
+
+      rows.push([
+        m.cas, m.grade, m.level, firstWeekCell(m), productCell(m), singleCourseCell(m),
+        ...(hasCycleCol ? [cycleCategoryTextWithWeek(m, avSlots[0] ? avSlots[0].assignedWeek : null)] : []),
+        ...(isEngJaju ? [m.engIsAlsoMgr ? 'O' : ''] : []),
+        matchedStr,
+        teacher.tabName,
+        teacherAvailStr,
+        m.possibleScheduleRaw,
+        m.unavailDisplay,
+        m.note,
+        getBroStr(m)
+      ]);
+    });
+
+    if (rows.length === 0) {
+      rows.push(['배정 가능 회원 없음']);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    ws['!cols'] = header.map(() => ({wch:18}));
+    // 마감임박(7/8 → 배정 시 8/8 완성) 가능시간 셀 노란색 강조
+    const matchedColIdx = header.indexOf('가능 시간 조합(현재인원)');
+    if (matchedColIdx >= 0) {
+      exactFitFlags.forEach((isExactFit, rIdx) => {
+        if (!isExactFit) return;
+        const addr = XLSX.utils.encode_cell({ r: rIdx + 1, c: matchedColIdx });
+        if (ws[addr]) ws[addr].s = XLSX_YELLOW_FILL;
+      });
+    }
+    // 추가 지침 추가
+    if (guidelines) {
+      XLSX.utils.sheet_add_aoa(ws, [[''], ['[추가지침]', guidelines]], {origin: rows.length + 3});
+    }
+    XLSX.utils.book_append_sheet(wb, ws, safeTabName);
+  });
+
+  XLSX.writeFile(wb, `배정결과_${getDateStr()}.xlsx`);
+}
+</script>
+</body>
+</html>
