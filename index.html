@@ -54,9 +54,11 @@
   .btn-gray:hover { background: #d1d5db; }
   .action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .stat-chip { background: var(--blue-light); border: 1px solid var(--blue-border); border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 700; color: var(--orange); }
-  .stat-chip.green { background: var(--green-light); border-color: var(--green-border); color: var(--green); }
-  .stat-chip.yellow { background: var(--yellow-light); border-color: var(--yellow-border); color: var(--yellow); }
+  .stat-chip { background: var(--yellow-light); border: 1px solid var(--yellow-border); border-radius: 20px; padding: 4px 14px; font-size: 13px; font-weight: 700; color: var(--yellow); }
+  .stat-chip.danger { border: 3px solid var(--red); color: var(--red); cursor: pointer; }
+  .stat-chip.danger:hover { background: var(--red-light); }
+  .no-match-list { display: none; margin-top: 10px; }
+  .no-match-list.show { display: block; }
   .section-title { font-size: 15px; font-weight: 800; border-left: 4px solid var(--orange); padding-left: 10px; margin-bottom: 14px; color: var(--orange); }
   .filter-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
   .filter-row label { font-size: 13px; font-weight: 600; }
@@ -114,6 +116,14 @@
   .nassign-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
   .n-input { width: 70px; border: 2px solid var(--blue-border); border-radius: 6px; padding: 5px 8px; font-size: 14px; font-weight: 700; font-family: inherit; text-align: center; }
   .n-input:focus { outline: none; border-color: var(--orange); }
+  .pt-chip { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--blue-border); border-radius: 8px; background: var(--blue-light); font-size: 12px; }
+  .pt-chip .n-input { width: 54px; padding: 3px 6px; font-size: 13px; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(28,16,8,.5); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.show { display: flex; }
+  .modal-box { background: #fff; border-radius: 12px; max-width: 720px; width: 100%; max-height: 85vh; overflow-y: auto; padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.2); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-weight: 800; color: var(--orange); font-size: 14px; }
+  .modal-close { border: none; background: var(--gray-light); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+  .modal-close:hover { background: #e5e7eb; }
   .early-section { background: var(--yellow-light); border: 1px solid var(--yellow-border); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
   .early-section h3 { font-size: 13px; font-weight: 700; color: var(--yellow); margin-bottom: 8px; }
   .random-section { margin-top: 16px; }
@@ -136,7 +146,6 @@
         <option value="gen">그룹일반</option>
         <option value="genN">그룹일반(N)</option>
         <option value="eng">그룹영어</option>
-        <option value="engJj">영어 자주표</option>
       </select>
       <span class="mode-hint" id="modeHint">교사 유형을 선택하면 비교 기준이 자동으로 설정됩니다</span>
     </div>
@@ -146,12 +155,6 @@
       <div class="product-check-grid" id="productCheckGrid">
         <span style="color:var(--text-muted);font-size:12px">배정 파일을 업로드하면 상품 목록이 자동으로 표시됩니다</span>
       </div>
-    </div>
-    <!-- 교사당 배정 인원 -->
-    <div class="nassign-row">
-      <span class="mode-label">교사당 임의 배정 인원:</span>
-      <input type="number" id="nPerTeacher" value="5" min="1" max="30" class="n-input">
-      <span style="font-size:12px;color:var(--text-muted)">명</span>
     </div>
     <div class="upload-grid">
       <div class="upload-box" id="box1" onclick="document.getElementById('file1').click()">
@@ -195,6 +198,18 @@
   <div id="resultsArea" style="display:none">
     <!-- 요약 통계 -->
     <div class="card" id="summaryCard"></div>
+
+    <!-- 교사별 임의 배정 인원 설정 -->
+    <div class="card">
+      <h2>🎯 교사별 임의 배정 인원 설정</h2>
+      <div class="nassign-row">
+        <span class="mode-label">전체 일괄 적용:</span>
+        <input type="number" id="bulkPerTeacher" value="3" min="0" max="30" class="n-input">
+        <button class="btn btn-gray" onclick="applyBulkPerTeacher()" style="padding:6px 14px">모든 교사에 적용</button>
+        <span style="font-size:12px;color:var(--text-muted)">교사별로 값을 직접 수정할 수도 있습니다. 비워두면 그 교사는 무제한(가능한 만큼)으로 배정됩니다.</span>
+      </div>
+      <div id="perTeacherTargets" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
 
     <!-- 탭 -->
     <div class="card">
@@ -244,6 +259,17 @@
         <span style="font-size:12px;color:var(--text-muted)">교사 탭별로 정리된 엑셀 파일이 저장됩니다.</span>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 가능 시간대 캘린더 모달 -->
+<div class="modal-overlay" id="slotModalOverlay" onclick="closeSlotModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span id="slotModalTitle"></span>
+      <button class="modal-close" onclick="closeSlotModal()">✕</button>
+    </div>
+    <div id="slotModalBody"></div>
   </div>
 </div>
 
@@ -323,9 +349,6 @@ function setMode(val) {
     sel.classList.add('selected');
   } else if (val === 'genN') {
     hint.textContent = '✅ 관리교사 열 비교 · 학년 기준 (N상품)';
-    sel.classList.add('selected');
-  } else if (val === 'engJj') {
-    hint.textContent = '✅ 영어교사 열 비교 · 레벨 기준 (자주표)';
     sel.classList.add('selected');
   } else {
     hint.textContent = '교사 유형을 선택하면 비교 기준이 자동으로 설정됩니다';
@@ -488,7 +511,12 @@ function safeNum(v) {
 }
 function fmtDate(v) {
   if (!v) return '';
-  if (v instanceof Date) return `${v.getFullYear()}.${v.getMonth()+1}.${v.getDate()}`;
+  if (v instanceof Date) {
+    const yy = String(v.getFullYear()).slice(-2);
+    const mm = String(v.getMonth()+1).padStart(2,'0');
+    const dd = String(v.getDate()).padStart(2,'0');
+    return `${yy}-${mm}-${dd}`;
+  }
   return safeStr(v);
 }
 // 로컬(브라우저) 날짜를 YYYY-MM-DD로 반환 (엑셀 파일명용 - UTC 변환으로 인한 날짜 오차 방지)
@@ -506,6 +534,11 @@ function firstWeekCell(m) {
 // 상품명: 원래 상품명 그대로 표시
 function productCell(m) {
   return m.product || '';
+}
+// 학년 표시: "초등" 글자를 빼고 숫자(또는 예비초 등)만 표시
+function gradeDisplay(g) {
+  const s = String(g || '').replace(/초등\s*/g, '').trim();
+  return s || '-';
 }
 // 단과여부: 상품명이 정확히 "캐츠잉글리시"인 경우만 "단과" (캐츠잉글리시+캐츠홈 등 결합상품은 단과 아님)
 function singleCourseCell(m) {
@@ -740,7 +773,7 @@ function buildFullMemberIndex(wb) {
   const map = new Map();
   const ws = wb.Sheets['★배정'];
   if (!ws) return map;
-  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' });
+  const aoa = fillMergedCells(ws, XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' }));
   for (let i = 8; i < aoa.length; i++) {
     const row = aoa[i];
     if (!row || !row[COL.CAS]) continue;
@@ -762,7 +795,7 @@ function buildFullMemberIndex(wb) {
 function parseAssignmentFile(wb) {
   const ws = wb.Sheets['★배정'];
   if (!ws) throw new Error("'★배정' 시트를 찾을 수 없습니다.");
-  const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' });
+  const aoa = fillMergedCells(ws, XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' }));
 
   const members = [];
   for (let i = 8; i < aoa.length; i++) { // 행 9부터 (0-indexed 8)
@@ -856,12 +889,6 @@ function parseAssignmentFile(wb) {
         mgrTeacher: safeStr(row[COL.BRO_MGR]),
         engTeacher: safeStr(row[COL.BRO_ENG])
       };
-    }
-
-    // 영어 자주표 모드: AX열에 '영어'가 포함된 회원만 대상
-    if (currentMode === 'engJj') {
-      const axVal = safeStr(row[COL.AX_ENG]);
-      if (!axVal.includes('영어')) continue;
     }
 
     // 상품 필터
@@ -1005,6 +1032,27 @@ function parseTeacherTabGenN(tabName, info, levels, aoa) {
   };
 }
 
+// 병합된 셀(예: 요일이 여러 시간대 행에 걸쳐 세로로 병합된 캘린더 형태)은 SheetJS가
+// header:1로 읽을 때 맨 왼쪽/맨 위 셀에만 값을 채우고 나머지는 null로 반환한다.
+// 그대로 두면 요일/시간 등이 null이 되어 해당 행의 회원이 통째로 누락되므로,
+// 워크시트의 병합 범위(ws['!merges'])를 읽어 병합된 모든 셀에 값을 채워 넣는다.
+function fillMergedCells(ws, aoa) {
+  const merges = ws && ws['!merges'];
+  if (!merges || !merges.length) return aoa;
+  merges.forEach(rng => {
+    const srcRow = aoa[rng.s.r];
+    const v = srcRow ? srcRow[rng.s.c] : undefined;
+    if (v === undefined || v === null || v === '') return;
+    for (let r = rng.s.r; r <= rng.e.r; r++) {
+      if (!aoa[r]) aoa[r] = [];
+      for (let c = rng.s.c; c <= rng.e.c; c++) {
+        if (aoa[r][c] === undefined || aoa[r][c] === null || aoa[r][c] === '') aoa[r][c] = v;
+      }
+    }
+  });
+  return aoa;
+}
+
 // ========== 파싱: 스케줄러 파일 ==========
 function parseSchedulerFile(wb) {
   const teachers = [];
@@ -1014,7 +1062,7 @@ function parseSchedulerFile(wb) {
     if (!info) return;
 
     const ws = wb.Sheets[tabName];
-    const aoa = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' });
+    const aoa = fillMergedCells(ws, XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd' }));
 
     // 레벨/학년: 탭 이름 괄호 안 숫자 (영어=레벨, 일반=학년)
     let levels = info.levels;
@@ -1323,12 +1371,49 @@ function setProgress(p) {
 function renderResults() {
   document.getElementById('resultsArea').style.display = 'block';
   renderSummary();
+  renderPerTeacherTargets();
   renderMemberTable();
   renderEarlyMembers();
   renderTeacherPanels();
   populateLevelFilter();
   showGuidelinesBox();
   document.getElementById('resultsArea').scrollIntoView({ behavior:'smooth' });
+}
+
+// 탭명을 DOM id로 안전하게 쓰기 위한 변환 (엑셀 시트명 정리 로직과 동일한 계열)
+function safeTeacherId(tabName) {
+  return 'pt_' + String(tabName).replace(/[^a-zA-Z0-9가-힣_]/g, '_');
+}
+
+// 교사별 임의 배정 인원 입력 목록 렌더링 (기존 입력값은 유지)
+function renderPerTeacherTargets() {
+  const wrap = document.getElementById('perTeacherTargets');
+  if (!wrap) return;
+  const prev = {};
+  wrap.querySelectorAll('input').forEach(inp => { prev[inp.dataset.tab] = inp.value; });
+  const bulkDefault = document.getElementById('bulkPerTeacher') ? document.getElementById('bulkPerTeacher').value : '3';
+  wrap.innerHTML = teachersData.map(t => {
+    const id = safeTeacherId(t.tabName);
+    const val = prev[t.tabName] !== undefined ? prev[t.tabName] : bulkDefault;
+    return `<span class="pt-chip">👩‍🏫 ${t.teacherName}
+      <input type="number" id="${id}" data-tab="${t.tabName.replace(/"/g,'&quot;')}" value="${val}" min="0" max="30" class="n-input">명
+    </span>`;
+  }).join('') || '<span style="color:var(--text-muted);font-size:12px">교사 데이터가 없습니다.</span>';
+}
+
+function applyBulkPerTeacher() {
+  const v = document.getElementById('bulkPerTeacher').value;
+  document.querySelectorAll('#perTeacherTargets input').forEach(inp => { inp.value = v; });
+}
+
+// 교사 tabName → 설정된 임의 배정 목표 인원(비어있으면 무제한=Infinity)
+function getPerTeacherTarget(tabName) {
+  const el = document.getElementById(safeTeacherId(tabName));
+  if (!el) return Infinity;
+  const raw = el.value.trim();
+  if (raw === '') return Infinity;
+  const n = parseInt(raw);
+  return isNaN(n) ? Infinity : n;
 }
 
 function showGuidelinesBox() {
@@ -1343,20 +1428,31 @@ function showGuidelinesBox() {
 }
 
 function renderSummary() {
-  const totalSlots = teachersData.reduce((s, t) => s + t.availableSlots.filter(sl => sl.available).length, 0);
   const withMatch = matchResults.filter(r => r.matches.some(m => m.hasSlots)).length;
-  const noMatch = matchResults.length - withMatch;
+  const noMatchList = matchResults.filter(r => !r.matches.some(m => m.hasSlots));
+  const noMatch = noMatchList.length;
 
   document.getElementById('summaryCard').innerHTML = `
     <div class="section-title">📊 요약</div>
     <div class="stat-row">
       <div class="stat-chip">📋 배정 필요 회원: <strong>${membersData.length}명</strong></div>
-      <div class="stat-chip green">✅ 매칭 가능: <strong>${withMatch}명</strong></div>
-      ${noMatch > 0 ? `<div class="stat-chip yellow">⚠️ 매칭 어려움: <strong>${noMatch}명</strong></div>` : ''}
+      <div class="stat-chip">✅ 매칭 가능: <strong>${withMatch}명</strong></div>
+      ${noMatch > 0 ? `<div class="stat-chip danger" onclick="toggleNoMatchList()">⚠️ 매칭 어려움: <strong>${noMatch}명</strong> (클릭)</div>` : ''}
       <div class="stat-chip">👩‍🏫 분석 교사: <strong>${teachersData.length}명</strong></div>
-      <div class="stat-chip">🕐 전체 가능 슬롯: <strong>${totalSlots}개</strong></div>
     </div>
+    ${noMatch > 0 ? `
+    <div class="no-match-list" id="noMatchList">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">매칭 어려운 회원 (${noMatch}명)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${noMatchList.map(r => `<span class="badge badge-red"><code>${r.member.cas}</code>${r.member.name ? ' ' + r.member.name : ''}${r.member.level ? ` Lv${r.member.level}` : ''}</span>`).join('')}
+      </div>
+    </div>` : ''}
   `;
+}
+
+function toggleNoMatchList() {
+  const el = document.getElementById('noMatchList');
+  if (el) el.classList.toggle('show');
 }
 
 function populateLevelFilter() {
@@ -1376,6 +1472,11 @@ function applyFilters() {
   renderMemberTable(lvFilter, dayFilter, searchFilter);
 }
 
+// 매칭 가능 교사 수(정렬용): videoRefused 등도 hasSlots면 포함
+function matchedTeacherCount(r) {
+  return r.matches.filter(mt => mt.hasSlots).length;
+}
+
 function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
   const filtered = matchResults.filter(r => {
     const m = r.member;
@@ -1388,16 +1489,18 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
     return true;
   });
 
+  // 매칭 안 된 회원이 맨 위, 그 다음 매칭 가능 교사 수가 적은 순
+  filtered.sort((a, b) => matchedTeacherCount(a) - matchedTeacherCount(b));
+
   const levelLabel = currentMode === 'eng' ? '레벨' : '학년(배정용)';
   let html = `<table>
     <thead><tr>
-      <th>#</th><th>첫수업주간</th><th>CAS번호</th><th>학년(원본)</th>
-      <th>${levelLabel}</th><th>가능 일정(수기_AJ열)</th>
-      <th>매칭 가능 교사/시간</th><th>불가능시간(설문 답변)</th><th>특이사항</th><th>형제</th>
+      <th>#</th><th>첫수업주간</th><th>상품</th><th>CAS번호</th>
+      <th>${levelLabel}</th><th>학년</th><th>매칭 가능 교사 및 시간</th><th>가능 일정(수기_AJ열)</th><th>불가능시간(설문 답변)</th><th>특이사항</th><th>형제</th>
     </tr></thead><tbody>`;
 
   if (filtered.length === 0) {
-    html += `<tr><td colspan="10" class="no-data">해당 조건의 회원이 없습니다.</td></tr>`;
+    html += `<tr><td colspan="11" class="no-data">해당 조건의 회원이 없습니다.</td></tr>`;
   }
 
   filtered.forEach((r, idx) => {
@@ -1452,12 +1555,12 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
     html += `<tr>
       <td>${idx+1}</td>
       <td style="white-space:nowrap">${m.firstWeek ? fmtDate(m.firstWeek) : '<span class="badge badge-gray">미입력</span>'}</td>
+      <td style="max-width:130px;font-size:12px">${productCell(m) || '-'}${cycleBadge ? `<br>${cycleBadge}` : ''}${mgrBadge ? `<br>${mgrBadge}` : ''}</td>
       <td><code>${m.cas}</code></td>
-
-      <td>${m.grade || '-'}${mgrBadge ? `<br>${mgrBadge}` : ''}</td>
-      <td><div style="width:58px">${levelBadge}${cycleBadge ? `<br>${cycleBadge}` : ''}</div></td>
-      <td style="max-width:180px;font-size:12px">${m.possibleScheduleRaw || '<span style="color:var(--text-muted)">-</span>'}</td>
+      <td><div style="width:58px">${levelBadge}</div></td>
+      <td>${gradeDisplay(m.grade)}</td>
       <td style="min-width:200px">${slotsHtml}</td>
+      <td style="max-width:180px;font-size:12px">${m.possibleScheduleRaw || '<span style="color:var(--text-muted)">-</span>'}</td>
       <td style="max-width:280px;font-size:12px;white-space:pre-line">${m.unavailDisplay || '-'}</td>
       <td style="max-width:240px;font-size:12px">${m.note || '-'}</td>
       <td>${broHtml}</td>
@@ -1511,6 +1614,88 @@ function renderEarlyMembers() {
   el.innerHTML = html;
 }
 
+// ========== 가능 시간대 캘린더 모달 ==========
+// 교사 레벨 표시 접두어. 예: teacher.levels=[2] → "Lv2", ['파닉스'] → "Lv파닉스"
+function slotLevelPrefix(teacher) {
+  if (!teacher || !teacher.levels || teacher.levels.length === 0) return 'Lv?';
+  return `Lv${teacher.levels.join(',')}`;
+}
+// 회원에게 실제로 열려있는(빨간) 슬롯의 표시 텍스트. 예: "Lv2(A) 1/8" / "Lv2 3/8"
+function matchSlotLabel(teacher, sl) {
+  const lv = slotLevelPrefix(teacher);
+  if (sl.assignedWeek) return `${lv}(${sl.assignedWeek[0]}) ${sl.currentCount}/8`;
+  return `${lv} ${sl.currentCount}/8`;
+}
+// 회원 기준으로는 열려있지 않은(회색) 슬롯이라도, 교사 방 자체의 현재 인원을 참고용으로 표시
+function teacherSlotLabel(teacher, slot) {
+  const lv = slotLevelPrefix(teacher);
+  if (!slot) return '-';
+  if (slot.countA !== undefined) return `${lv}(A) ${slot.countA}/8 · ${lv}(B) ${slot.countB}/8`;
+  return `${lv} ${slot.count}/8`;
+}
+// 요일→시간 순으로 가장 이른 매칭 슬롯의 day-time 키를 찾음 (⭐ 최우선 추천용)
+function findEarliestSlotKey(availableSlots) {
+  let found = null;
+  DAYS_ORDER.some(day => TIME_SLOTS.some(time => {
+    const hit = (availableSlots || []).find(s => s.day === day && s.time === time);
+    if (hit) { found = `${day}-${time}`; return true; }
+    return false;
+  }));
+  return found;
+}
+// 회원×교사 조합의 요일×시간 캘린더 그리드 HTML. 회원이 실제로 들어갈 수 있는 칸은 빨간 테두리,
+// 그 중 가장 이른 칸에는 ⭐(가장 추천) 표시. 나머지 칸은 참고용으로 교사 방의 현재 인원만 회색으로 표시.
+function buildSlotGridHtml(teacher, mt) {
+  const matchByKey = {};
+  (mt.availableSlots || []).forEach(sl => { matchByKey[`${sl.day}-${sl.time}`] = sl; });
+  const earliestKey = findEarliestSlotKey(mt.availableSlots);
+
+  let html = '<div style="overflow-x:auto"><table style="font-size:12px;border-collapse:collapse;width:100%">';
+  html += '<thead><tr><th style="padding:6px">시간</th>' + DAYS_ORDER.map(d => `<th style="padding:6px">${d}</th>`).join('') + '</tr></thead><tbody>';
+  TIME_SLOTS.forEach(time => {
+    html += `<tr><td style="font-weight:700;white-space:nowrap;padding:6px 8px">${time}</td>`;
+    DAYS_ORDER.forEach(day => {
+      const key = `${day}-${time}`;
+      const sl = matchByKey[key];
+      if (sl) {
+        const star = key === earliestKey ? '⭐ ' : '';
+        const recTitle = key === earliestKey ? ' title="가장 이른 추천 시간"' : '';
+        html += `<td${recTitle} style="background:var(--red-light);border:2px solid var(--red);border-radius:6px;padding:6px;text-align:center;color:var(--red);font-weight:700;white-space:nowrap">${star}${matchSlotLabel(teacher, sl)}</td>`;
+      } else {
+        const tslot = teacher.availableSlots.find(s => s.day === day && s.time === time);
+        html += `<td style="padding:6px;text-align:center;color:var(--text-muted);white-space:nowrap">${teacherSlotLabel(teacher, tslot)}</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="margin-top:10px;font-size:12px;color:var(--text-muted)">🔴 빨간 테두리 = 이 회원이 실제로 들어갈 수 있는 시간 · ⭐ = 그 중 가장 이른(추천) 시간 · 회색 숫자 = 참고용 현재 인원</div>';
+  return html;
+}
+// 임의배정결과/교사별 보기 표에서 "교사 가능시간" 칸에 들어가는 버튼
+function slotModalButton(cas, tabName) {
+  const safeTab = String(tabName).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safeCas = String(cas).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return `<button class="btn btn-gray" style="padding:3px 10px;font-size:11px" onclick="openSlotModal('${safeCas}','${safeTab}')">📅 시간표 보기</button>`;
+}
+function openSlotModal(cas, tabName) {
+  const r = matchResults.find(x => x.member.cas === cas);
+  if (!r) return;
+  const mt = r.matches.find(m => m.teacher.tabName === tabName && m.hasSlots);
+  if (!mt) return;
+  document.getElementById('slotModalTitle').textContent = `👩‍🏫 ${mt.teacher.teacherName} (${mt.teacher.tabName}) — 회원 ${r.member.cas} 가능 시간대`;
+  const body = document.getElementById('slotModalBody');
+  if (mt.videoRefused) {
+    body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">화상코칭거부 회원은 시간과 무관하게 레벨만으로 매칭됩니다.</div>';
+  } else {
+    body.innerHTML = buildSlotGridHtml(mt.teacher, mt);
+  }
+  document.getElementById('slotModalOverlay').classList.add('show');
+}
+function closeSlotModal() {
+  document.getElementById('slotModalOverlay').classList.remove('show');
+}
+
 function renderTeacherPanels() {
   let html = '';
 
@@ -1524,44 +1709,6 @@ function renderTeacherPanels() {
       ? teacher.levels.map(l => `<span class="badge badge-yellow">Lv${l}</span>`).join(' ')
       : '<span class="badge badge-gray">레벨 미확인</span>';
 
-    // 가능 시간대 표 (8명 미만 슬롯만)
-    const availSlots = teacher.availableSlots.filter(s => s.available);
-    const slotsByDay = {};
-    availSlots.forEach(s => {
-      if (!slotsByDay[s.day]) slotsByDay[s.day] = [];
-      slotsByDay[s.day].push(s);
-    });
-
-    let slotTable;
-    if (availSlots.length === 0) {
-      slotTable = '<div style="color:var(--text-muted);font-size:12px;padding:6px 0">가능한 시간대가 없습니다 (전체 마감)</div>';
-    } else {
-      slotTable = '<div style="overflow-x:auto"><table style="font-size:12px;width:auto">';
-      slotTable += '<thead><tr><th>시간</th>' + DAYS_ORDER.filter(d => slotsByDay[d]).map(d => `<th>${d}</th>`).join('') + '</tr></thead><tbody>';
-      TIME_SLOTS.forEach(time => {
-        let row = `<td style="font-weight:600;white-space:nowrap">${time}</td>`;
-        const days = DAYS_ORDER.filter(d => slotsByDay[d]);
-        days.forEach(day => {
-          const slot = (slotsByDay[day] || []).find(s => s.time === time);
-          if (slot) {
-            if (currentMode === 'genN' || (isEngJajuMode() && slot.countA !== undefined)) {
-              // A주/B주 인원을 각각 표시
-              const clsA = slot.countA >= 7 ? 'badge-red' : slot.countA >= 5 ? 'badge-yellow' : 'badge-green';
-              const clsB = slot.countB >= 7 ? 'badge-red' : slot.countB >= 5 ? 'badge-yellow' : 'badge-green';
-              row += `<td><span class="badge ${clsA}">A ${slot.countA}/8</span> <span class="badge ${clsB}">B ${slot.countB}/8</span></td>`;
-            } else {
-              const cls = slot.count >= 7 ? 'badge-red' : slot.count >= 5 ? 'badge-yellow' : 'badge-green';
-              row += `<td><span class="badge ${cls}">${slot.count}/8</span></td>`;
-            }
-          } else {
-            row += '<td>-</td>';
-          }
-        });
-        slotTable += `<tr>${row}</tr>`;
-      });
-      slotTable += '</tbody></table></div>';
-    }
-
     html += `
     <div class="teacher-section">
       <div class="teacher-header">
@@ -1570,10 +1717,6 @@ function renderTeacherPanels() {
         <span class="badge badge-gray">현재 ${teacher.totalMembers}명</span>
         <span class="badge ${assignable.length > 0 ? 'badge-green' : 'badge-gray'}">배정가능 ${assignable.length}명</span>
       </div>
-      <details>
-        <summary>가능 시간대 보기 (${availSlots.length}개 슬롯)</summary>
-        <div>${slotTable}</div>
-      </details>
       <details style="margin-top:6px">
         <summary>배정 가능 회원 (${assignable.length}명)</summary>
         <div>
@@ -1594,7 +1737,7 @@ function renderTeacherPanels() {
                   }
                   const slotStr = m.videoRefused
                     ? '화상코칭거부'
-                    : (mt ? mt.availableSlots.slice(0,5).map(s=>`${s.day} ${s.time}${s.assignedWeek ? ' '+s.assignedWeek : ''} (${s.currentCount}/8)`).join('<br>') : '-');
+                    : (mt ? slotModalButton(m.cas, teacher.tabName) : '-');
                   return `<tr>
                     <td>${i+1}</td>
                     <td><code>${m.cas}</code></td>
@@ -1625,19 +1768,17 @@ function randomAssign() {
   if (!matchResults || matchResults.length === 0) {
     alert('먼저 비교를 실행하세요.'); return;
   }
-  // 인원수를 입력하지 않으면 상한 없이(가능한 만큼) 끝까지 고루 배정,
-  // 입력하면 교사당 최대 n명까지 배정 (회원이 충분한 교사는 n명 그대로,
-  // 부족한 교사는 가능한 만큼만 배정되어 자연히 고루 분배됨)
-  const nRaw = document.getElementById('nPerTeacher').value.trim();
-  const hasLimit = nRaw !== '';
-  const n = hasLimit ? (parseInt(nRaw) || 5) : Infinity;
+  // 교사별로 설정된 임의 배정 목표 인원 (비어있으면 그 교사는 무제한 - 가능한 만큼)
+  const targets = {};
+  teachersData.forEach(teacher => { targets[teacher.tabName] = getPerTeacherTarget(teacher.tabName); });
+
   const used = new Set();
   const perTeacher = {};
   teachersData.forEach(teacher => {
     perTeacher[teacher.tabName] = { teacher, picked: [] };
   });
 
-  // 회원/교사 순서를 무작위로 섞은 뒤, 라운드 로빈 방식으로 교사당 최대 n명까지 배정
+  // 회원/교사 순서를 무작위로 섞은 뒤, 라운드 로빈 방식으로 교사별 목표 인원까지 배정
   // → 회원 수가 부족해도 특정 교사에게 몰리지 않고 고루 배정됨
   const shuffledMembers = matchResults.slice().sort(() => Math.random() - 0.5);
   const shuffledTeachers = teachersData.slice().sort(() => Math.random() - 0.5);
@@ -1648,11 +1789,11 @@ function randomAssign() {
   shuffledMembers.forEach(r => {
     if (used.has(r.member.cas)) return;
     if (!hasExactFitMatch(r.matches)) return;
-    // 7/8 슬롯이 있는 매칭 교사 중, 아직 자리(n)가 남은 교사를 우선 선택
+    // 7/8 슬롯이 있는 매칭 교사 중, 아직 목표 인원이 남은 교사를 우선 선택
     const mt = r.matches.find(mt2 =>
       mt2.hasSlots && !mt2.videoRefused &&
       mt2.availableSlots.some(isExactFitSlot) &&
-      perTeacher[mt2.teacher.tabName].picked.length < n
+      perTeacher[mt2.teacher.tabName].picked.length < targets[mt2.teacher.tabName]
     );
     if (!mt) return;
     used.add(r.member.cas);
@@ -1660,10 +1801,11 @@ function randomAssign() {
     r._exactFitPicked = true;
   });
 
-  for (let round = 0; round < n; round++) {
+  const maxRounds = matchResults.length + 1; // 안전장치(무제한 교사가 있어도 후보 소진 시 progress=false로 조기 종료됨)
+  for (let round = 0; round < maxRounds; round++) {
     let progress = false;
     shuffledTeachers.forEach(teacher => {
-      if (perTeacher[teacher.tabName].picked.length >= n) return;
+      if (perTeacher[teacher.tabName].picked.length >= targets[teacher.tabName]) return;
       const candidate = shuffledMembers.find(r =>
         !used.has(r.member.cas) &&
         r.matches.some(m => m.teacher.tabName === teacher.tabName && m.hasSlots)
@@ -1674,20 +1816,18 @@ function randomAssign() {
         progress = true;
       }
     });
-    if (!progress) break; // 더 이상 배정할 수 있는 회원이 없으면 종료 (인원수 미입력 시 무한루프 방지)
+    if (!progress) break; // 더 이상 배정할 수 있는 회원이 없으면 종료
   }
 
   const unassigned = matchResults.filter(r => !used.has(r.member.cas));
 
   // 엑셀 다운로드용으로 결과 저장
-  lastRandomAssign = { n: hasLimit ? n : null, perTeacher, unassigned };
+  lastRandomAssign = { targets, perTeacher, unassigned };
 
   // 렌더링
   const el = document.getElementById('randomAssignResult');
   if (!el) return;
-  let html = hasLimit
-    ? `<div class='section-title'>🎲 임의 배정 결과 (교사당 최대 ${n}명, 부족하면 고루 배정)</div>`
-    : `<div class='section-title'>🎲 임의 배정 결과 (인원수 미입력 - 가능한 회원 전체를 고루 배정)</div>`;
+  let html = `<div class='section-title'>🎲 임의 배정 결과 (교사별 설정 인원 기준)</div>`;
   html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🔶 표시는 마감임박(7/8) 자리를 채우는 우선 배정 회원입니다.</div>`;
   Object.values(perTeacher).forEach(({ teacher, picked }) => {
     if (picked.length === 0) return;
@@ -1698,9 +1838,7 @@ function randomAssign() {
     picked.forEach((r, i) => {
       const m = r.member;
       const mt = r.matches.find(mt2 => mt2.teacher.tabName === teacher.tabName && mt2.hasSlots);
-      const slotStr = mt
-        ? mt.availableSlots.slice(0,5).map(s=>`${s.day} ${s.time}${s.assignedWeek ? ' '+s.assignedWeek : ''} (${s.currentCount}/8)`).join('<br>')
-        : '-';
+      const slotStr = m.videoRefused ? '화상코칭거부' : (mt ? slotModalButton(m.cas, teacher.tabName) : '-');
       let cycleCell = '';
       if (currentMode === 'genN') {
         const week = mt && mt.availableSlots[0] ? mt.availableSlots[0].assignedWeek : null;
