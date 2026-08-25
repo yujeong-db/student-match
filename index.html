@@ -1163,6 +1163,12 @@ function parseSchedulerFile(wb) {
     // 특정 요일/시간 칸에 이미 배정된 회원의 레벨이 있으면 그 레벨의 신규 회원만 매칭되고,
     // 칸이 비어있으면(레벨 정보 없음) 어떤 레벨의 회원이든 매칭 가능하도록 함.
     const slotLevelSets = {};
+    // 그룹영어(eng) 한정: A주 트랙/B주 트랙에 각각 실제로 기록되어 있는 레벨 집합.
+    // 같은 요일-시간 칸이라도 A주에 열리는 반과 B주에 열리는 반의 레벨(반 이름)이 다를 수 있어
+    // slotLevelSets(주 구분 없이 합친 값)와 별도로 관리함 (모달에서 "Lv4(A) / Lv5(B)"처럼 각 줄에
+    // 서로 다른 레벨을 표시하기 위함).
+    const slotLevelSetsA = {};
+    const slotLevelSetsB = {};
     // 슬롯별로 이미 기록되어 있는 상품(M열) 집합 — 참고용 표시(어떤 상품의 학생들이 그 칸에 있는지)
     const slotProductSets = {};
     const membersInTab = [];
@@ -1203,15 +1209,28 @@ function parseSchedulerFile(wb) {
           const info2 = fullMemberIndex.get(cas);
           if (info2 && info2.isJaju) {
             jajuInfo = info2;
-            if (info2.abWeek === 'A주') slotJajuA[key] = (slotJajuA[key] || 0) + 1;
-            else if (info2.abWeek === 'B주') slotJajuB[key] = (slotJajuB[key] || 0) + 1;
-            else {
+            if (info2.abWeek === 'A주') {
+              slotJajuA[key] = (slotJajuA[key] || 0) + 1;
+              if (normLevel) (slotLevelSetsA[key] = slotLevelSetsA[key] || new Set()).add(normLevel);
+            } else if (info2.abWeek === 'B주') {
+              slotJajuB[key] = (slotJajuB[key] || 0) + 1;
+              if (normLevel) (slotLevelSetsB[key] = slotLevelSetsB[key] || new Set()).add(normLevel);
+            } else {
               // 첫수업주간 미확인 등으로 A/B 판별 불가 → 정원 초과 방지를 위해 양쪽 다 차지한 것으로 보수적 처리
               slotJajuA[key] = (slotJajuA[key] || 0) + 1;
               slotJajuB[key] = (slotJajuB[key] || 0) + 1;
+              if (normLevel) {
+                (slotLevelSetsA[key] = slotLevelSetsA[key] || new Set()).add(normLevel);
+                (slotLevelSetsB[key] = slotLevelSetsB[key] || new Set()).add(normLevel);
+              }
             }
           } else {
             slotWeekly[key] = (slotWeekly[key] || 0) + 1;
+            // 매주(전과목/단과) 회원은 A주·B주 모두 수업하므로 두 트랙 레벨 집합에 함께 기록
+            if (normLevel) {
+              (slotLevelSetsA[key] = slotLevelSetsA[key] || new Set()).add(normLevel);
+              (slotLevelSetsB[key] = slotLevelSetsB[key] || new Set()).add(normLevel);
+            }
           }
         }
       }
@@ -1244,8 +1263,10 @@ function parseSchedulerFile(wb) {
           const earlyOk = !EARLY_TIMES_SET.has(time) || maxCount > 0;
           const available = (countA < 8 || countB < 8) && earlyOk;
           const slotLevel = [...(slotLevelSets[key] || [])];
+          const slotLevelA = [...(slotLevelSetsA[key] || [])];
+          const slotLevelB = [...(slotLevelSetsB[key] || [])];
           const slotProduct = [...(slotProductSets[key] || [])];
-          availableSlots.push({ day, time, count: maxCount, weekly, jajuA, jajuB, countA, countB, available, isEarly: EARLY_TIMES_SET.has(time), slotLevel, slotProduct });
+          availableSlots.push({ day, time, count: maxCount, weekly, jajuA, jajuB, countA, countB, available, isEarly: EARLY_TIMES_SET.has(time), slotLevel, slotLevelA, slotLevelB, slotProduct });
         });
       });
     } else {
@@ -1627,7 +1648,6 @@ function renderSummary() {
       <div class="stat-chip">📋 배정 필요 회원: <strong>${membersData.length}명</strong></div>
       <div class="stat-chip">✅ 매칭 가능: <strong>${withMatch}명</strong></div>
       ${noMatch > 0 ? `<div class="stat-chip danger" onclick="toggleNoMatchList()">⚠️ 매칭 어려움: <strong>${noMatch}명</strong> (클릭)</div>` : ''}
-      <div class="stat-chip">👩‍🏫 분석 교사: <strong>${teachersData.length}명</strong></div>
     </div>
     ${noMatch > 0 ? `
     <div class="no-match-list" id="noMatchList">
@@ -1917,10 +1937,16 @@ function matchSlotLabel(sl) {
 // A주/B주 두 트랙은 가로로 나란히(· 로 구분)가 아니라 각각 한 줄씩 세로로 나열함.
 function teacherSlotLabel(slot) {
   if (!slot) return '-';
-  const lv = slotLevelText(slot);
   const prod = slotProductText(slot);
   const prodHtml = prod ? `<div style="font-size:9px;opacity:.75">${prod}</div>` : '';
-  if (slot.countA !== undefined) return `<div>${lv}(A) ${slot.countA}/8</div><div>${lv}(B) ${slot.countB}/8</div>${prodHtml}`;
+  if (slot.countA !== undefined) {
+    // A주/B주는 같은 요일-시간 칸이라도 서로 다른 레벨(반)이 열려 있을 수 있으므로 각 트랙의
+    // 레벨을 따로 계산해서 표시 (예: 윗줄 Lv4(A) 7/8, 아랫줄 Lv5(B) 4/8).
+    const lvA = slotLevelText({ slotLevel: slot.slotLevelA });
+    const lvB = slotLevelText({ slotLevel: slot.slotLevelB });
+    return `<div>${lvA}(A) ${slot.countA}/8</div><div>${lvB}(B) ${slot.countB}/8</div>${prodHtml}`;
+  }
+  const lv = slotLevelText(slot);
   return `${lv} ${slot.count}/8${prodHtml}`;
 }
 // 요일→시간 순으로 가장 이른 매칭 슬롯의 day-time 키를 찾음 (⭐ 최우선 추천용)
@@ -1956,11 +1982,11 @@ function buildSlotGridHtml(teacher, mt, excludeKey) {
       if (sl) {
         const star = key === earliestKey ? '⭐ ' : '';
         const recTitle = key === earliestKey ? ' title="가장 이른 추천 시간"' : '';
-        html += `<td${recTitle} style="background:var(--red-light);border:2px solid var(--red);border-radius:6px;padding:6px;text-align:center;color:var(--red);font-weight:700;white-space:nowrap">${star}${matchSlotLabel(sl)}</td>`;
+        html += `<td${recTitle} style="background:var(--red-light);border:2px solid var(--red);border-radius:6px;padding:6px;text-align:center;color:var(--red);font-weight:700;white-space:normal;word-break:keep-all;overflow-wrap:break-word">${star}${matchSlotLabel(sl)}</td>`;
       } else {
         const tslot = teacher.availableSlots.find(s => s.day === day && s.time === time);
         const assignedTag = (excludeKey && key === excludeKey) ? '✅ ' : '';
-        html += `<td style="padding:6px;text-align:center;color:var(--text-muted);white-space:nowrap">${assignedTag}${teacherSlotLabel(tslot)}</td>`;
+        html += `<td style="padding:6px;text-align:center;color:var(--text-muted);white-space:normal;word-break:keep-all;overflow-wrap:break-word">${assignedTag}${teacherSlotLabel(tslot)}</td>`;
       }
     });
     html += '</tr>';
@@ -2241,10 +2267,10 @@ function buildAssignPickerHtml(cas, tabName, teacher, mt) {
       const sl = matchByKey[key];
       if (sl) {
         const star = key === earliestKey ? '⭐ ' : '';
-        html += `<td class="assign-pick-cell" style="background:var(--red-light);border:2px solid var(--red);border-radius:6px;padding:6px;text-align:center;color:var(--red);font-weight:700;white-space:nowrap;cursor:pointer" onclick="selectAssignSlot(this,'${jsStr(cas)}','${jsStr(tabName)}','${jsStr(day)}','${jsStr(time)}')">${star}${matchSlotLabel(sl)}</td>`;
+        html += `<td class="assign-pick-cell" style="background:var(--red-light);border:2px solid var(--red);border-radius:6px;padding:6px;text-align:center;color:var(--red);font-weight:700;white-space:normal;word-break:keep-all;overflow-wrap:break-word;cursor:pointer" onclick="selectAssignSlot(this,'${jsStr(cas)}','${jsStr(tabName)}','${jsStr(day)}','${jsStr(time)}')">${star}${matchSlotLabel(sl)}</td>`;
       } else {
         const tslot = teacher.availableSlots.find(s => s.day === day && s.time === time);
-        html += `<td style="padding:6px;text-align:center;color:var(--text-muted);white-space:nowrap">${teacherSlotLabel(tslot)}</td>`;
+        html += `<td style="padding:6px;text-align:center;color:var(--text-muted);white-space:normal;word-break:keep-all;overflow-wrap:break-word">${teacherSlotLabel(tslot)}</td>`;
       }
     });
     html += '</tr>';
