@@ -81,7 +81,8 @@
   .slot-item .teacher-name-cell { flex: 0 0 auto; white-space: nowrap; align-self: center; }
   /* 가능 시간은 교사 이름 오른쪽에서 세로(위→아래)로 나열 */
   .slot-item .time-chip-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 1 1 auto; min-width: 0; }
-  .slot-item .time-chip-wrap .times-full { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .slot-item .time-chip-wrap .times-full,
+  .slot-item .time-chip-wrap .times-short { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
   .slot-item .time-chip { white-space: nowrap; font-size: 10px; background: rgba(255,255,255,.65); border-radius: 4px; padding: 1px 5px; align-self: flex-end; }
   .teacher-section { margin-bottom: 24px; }
   .teacher-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -246,6 +247,13 @@
           <select id="filterLevel" onchange="applyFilters()">
             <option value="">전체</option>
           </select>
+          <label>상품:</label>
+          <select id="filterProductCat" onchange="applyFilters()">
+            <option value="">전체</option>
+            <option value="전과목">전과목</option>
+            <option value="단과">단과</option>
+            <option value="자주표">자주표</option>
+          </select>
           <label>가능요일:</label>
           <select id="filterDay" onchange="applyFilters()">
             <option value="">전체</option>
@@ -303,6 +311,9 @@ let previewTeacherList = [];
 // 자주표(자기주도표) 회원이 이미 어느 교사 방에 A주/B주로 들어가 있는지 판별하려면
 // (교사 스케줄러 파일에는 CAS번호만 있고 구분/첫수업주간이 없으므로) 이 맵으로 역조회한다.
 let fullMemberIndex = new Map();
+// 교사 이름 → 색상 팔레트 인덱스. 회원별 보기 등 여러 행에 걸쳐 같은 교사는 항상 같은 색으로
+// 보이도록 화면 전체에서 공유하는 전역 맵(행마다 새로 만들면 매번 색이 바뀌어 구분이 어려움).
+let teacherColorMapGlobal = new Map();
 
 function toggleProduct(el) {
   const val = el.value;
@@ -438,6 +449,22 @@ function getAbWeek(dateVal) {
 function isJajuMember(gubunVal) {
   return String(gubunVal || '').includes('자주표');
 }
+// 구독상품명(I열)만으로 상품 종류(전과목/단과/자주표)를 판별 (사용자 확인 기준):
+// "캐츠잉글리시"만 있으면 단과, "캐츠잉글리시+캐츠홈(...)"이면 "자기주도학습표" 포함 여부로 자주표/전과목 구분.
+// 알 수 없는 형식(gen/genN 관리교사 상품 등)이면 빈 문자열 반환(미분류).
+function productCategory(rawProduct) {
+  const p = stripYear(String(rawProduct || '').trim());
+  if (!p) return '';
+  if (p === '캐츠잉글리시') return '단과';
+  if (p.includes('캐츠홈')) return p.includes('자기주도학습표') ? '자주표' : '전과목';
+  return '';
+}
+// 회원의 최종 상품 카테고리: isJaju 플래그(구분열+상품명 둘 다 반영해 계산됨)를 우선하고,
+// 아니면 상품명 기준(productCategory)으로 전과목/단과 판별.
+function memberProductCategory(m) {
+  if (m.isJaju) return '자주표';
+  return productCategory(m.product);
+}
 // 화면/엑셀 공통: 코칭구분(전과목·단과 / 자주표) 표시용 라벨. genN의 '코칭주기' 표시와 같은 위치에 씀.
 // week: 배정된 슬롯의 assignedWeek('A주'/'B주') - 있으면 함께 표시
 function isEngJajuMode() { return currentMode === 'eng' || currentMode === 'engJj'; }
@@ -504,6 +531,7 @@ function resetAll() {
   wb1 = wb2 = null; membersData = []; teachersData = []; matchResults = []; lastRandomAssign = null;
   previewTeacherList = [];
   teacherLevelRestrictions = {};
+  teacherColorMapGlobal = new Map();
   document.getElementById('file1').value = '';
   document.getElementById('file2').value = '';
   ['1','2'].forEach(n => {
@@ -560,10 +588,10 @@ function firstWeekCell(m) {
 function productCell(m) {
   return m.product || '';
 }
-// 화면(회원별 보기) 표시용 상품 구분: 구분(B열)에 '자주표'가 포함되면 '자주표', 아니면 '전과목/단과'만 표시
-// (원래 상품명 "캐츠잉글리시+캐츠홈 2년" 처럼 길게 나오던 것을 단순화)
+// 화면(회원별 보기) 표시용 상품 구분: 전과목/단과/자주표 3종류로 표시
+// (원래 상품명 "캐츠잉글리시+캐츠홈 2년" 처럼 길게 나오던 것을 단순화 — memberProductCategory 기준)
 function productSimpleCell(m) {
-  return isJajuMember(m.gubun) ? '자주표' : '전과목/단과';
+  return memberProductCategory(m) || '전과목/단과'; // 상품명 패턴이 안 맞아 미분류인 경우 기존처럼 통합 표시(폴백)
 }
 // 예비초/알파벳 → 파닉스 매칭 버킷으로 정규화 (교사 스케줄러의 기존 배정 회원 레벨과 비교할 때도 동일하게 적용)
 function normalizeLevelForMatch(v) {
@@ -817,11 +845,13 @@ function buildFullMemberIndex(wb) {
     if (!cas || isNaN(parseInt(cas))) continue;
     const gubun = safeStr(row[COL.GUBUN]);
     const firstWeek = row[COL.FIRST_WEEK] ? new Date(row[COL.FIRST_WEEK]) : null;
+    // 자주표 판정: 구분(B열)='자주표' 또는 상품명(I열)이 "...캐츠홈(자기주도학습표)" 패턴 — 둘 중 하나만 맞아도 자주표로 인정(상호 보완)
+    const isJajuVal = isJajuMember(gubun) || productCategory(safeStr(row[COL.PRODUCT])) === '자주표';
     map.set(cas, {
       gubun,
-      isJaju: isJajuMember(gubun),
+      isJaju: isJajuVal,
       firstWeek,
-      abWeek: isJajuMember(gubun) ? getAbWeek(firstWeek) : null
+      abWeek: isJajuVal ? getAbWeek(firstWeek) : null
     });
   }
   return map;
@@ -945,7 +975,8 @@ function parseAssignmentFile(wb) {
     const firstWeekDate = row[COL.FIRST_WEEK] ? new Date(row[COL.FIRST_WEEK]) : null;
     // 그룹영어(eng/engJj) 한정: 구분(B열)이 '자주표'인 회원은 격주(A주/B주) 코칭
     const isEngMode = currentMode === 'eng' || currentMode === 'engJj';
-    const isJaju = isEngMode && isJajuMember(gubunVal);
+    // 자주표 판정: 구분(B열)='자주표' 또는 상품명(I열)이 "...캐츠홈(자기주도학습표)" 패턴 — 둘 중 하나만 맞아도 인정(상호 보완, GUBUN 표기가 실제로 다를 수 있는 경우 대비)
+    const isJaju = isEngMode && (isJajuMember(gubunVal) || productCategory(productVal) === '자주표');
     const abWeek = isJaju ? getAbWeek(firstWeekDate) : null;
     // 학년(H열)에 '초등6'/'6학년'/'예비초'가 적혀있으면 영어교사가 관리교사를 겸함 (안내용 표시)
     const gradeRawForMgr = safeStr(row[COL.GRADE]);
@@ -1141,15 +1172,16 @@ function parseSchedulerFile(wb) {
       const cas = safeStr(row[3]); // D열: 회원번호
       if (!cas || isNaN(parseInt(cas))) continue;
 
-      // 개별 스케줄러 탭의 요일/시간/레벨(무슨 수업)은 G·H·I열, 상품은 M열에 기록됨.
-      const day = safeStr(row[6]);    // G열: 요일
-      const time = parseTime(row[7]); // H열: 시간
+      // 개별 스케줄러 탭: 이미 그 교사와 수업 중인 회원의 요일/시간은 H·I열, 그 레벨을 수업하는
+      // 반 이름(레벨/학년)은 G열, 상품은 M열에 기록됨. (사용자 확인에 따라 컬럼 재수정)
+      const day = safeStr(row[7]);    // H열: 요일 (이미 수업 중인 회원의 요일)
+      const time = parseTime(row[8]); // I열: 시간 (이미 수업 중인 회원의 시간)
       const rawProduct = safeStr(row[12]); // M열: 상품
 
-      // 영어/일반 공통으로 I열(무슨 수업=레벨/학년)을 캘린더 상 "회원 이름 위에 적힌 레벨"로 사용.
-      // 일반 모드는 학년 텍스트("초등3" 등)에서 숫자만 추출.
-      const memberLevel = isEng ? safeStr(row[8]) : (() => {
-        const gr = safeStr(row[8]);
+      // 영어/일반 공통으로 G열(그 레벨을 수업하는 반 이름)을 캘린더 상 "회원 이름 위에 적힌 레벨"로 사용.
+      // 일반 모드는 반 이름 텍스트("초등3" 등)에서 숫자만 추출.
+      const memberLevel = isEng ? safeStr(row[6]) : (() => {
+        const gr = safeStr(row[6]);
         const gm = gr.match(/(\d+)/);
         return gm ? gm[1] : gr;
       })();
@@ -1639,9 +1671,10 @@ function levelGroupKey(m) {
 
 function applyFilters() {
   const lvFilter = document.getElementById('filterLevel').value;
+  const productCatFilter = document.getElementById('filterProductCat').value;
   const dayFilter = document.getElementById('filterDay').value;
   const searchFilter = document.getElementById('filterSearch').value.toLowerCase();
-  renderMemberTable(lvFilter, dayFilter, searchFilter);
+  renderMemberTable(lvFilter, dayFilter, searchFilter, productCatFilter);
 }
 
 // 매칭 가능 교사 수(정렬용): videoRefused 등도 hasSlots면 포함
@@ -1672,12 +1705,16 @@ function jsStr(v) {
 // 회원의 "매칭 가능 교사 및 시간" 칸 HTML. 교사(탭) 하나당 박스 하나로 묶어서 그 안에 가능한
 // 요일/시간을 모두 나열한다(교사가 다르면 다른 색 박스로 구분). 적게 찬 방(인원수 적은 슬롯)부터
 // 위로 오도록 박스/시간 모두 인원수 오름차순 정렬.
-// opts: { cap: 표시할 교사 박스 최대 개수(0/생략=전체), collapseTimes: 시간이 3개 이상이면 첫 시간만
-//         보여주고 화살표로 펼치기, clickable: 박스를 클릭하면 시간 선택 캘린더(추가 배정용)를 염 }
+// opts: { cap: 표시할 교사 박스 최대 개수(0/생략=전체), collapseTimes: 시간이 collapseThreshold개
+//         이상이면 collapseShow개까지만 보여주고 화살표로 나머지 펼치기(기본 3개 이상→1개만),
+//         collapseThreshold/collapseShow: 위 기준 커스터마이즈, clickable: 박스를 클릭하면 시간
+//         선택 캘린더(추가 배정용)를 염 }
 function renderTeacherSlotsHtml(r, opts) {
   opts = opts || {};
   const cap = opts.cap;
   const collapseTimes = !!opts.collapseTimes;
+  const collapseThreshold = opts.collapseThreshold || 3;
+  const collapseShow = opts.collapseShow || 1;
   const clickable = !!opts.clickable;
   const m = r.member;
   const matches = r.matches.filter(mt => mt.hasSlots);
@@ -1697,7 +1734,9 @@ function renderTeacherSlotsHtml(r, opts) {
   }).sort((a, b) => a.minCount - b.minCount);
 
   const display = cap ? grouped.slice(0, cap) : grouped;
-  const colorMap = new Map();
+  // 교사 이름 → 색상 매핑은 화면 전체에서 공유하는 전역 맵(teacherColorMapGlobal)을 사용해,
+  // 같은 교사는 어느 회원의 행이든 항상 같은 색으로 보이도록 함(행마다 새로 만들면 매번 색이 바뀌어 구분이 어려움).
+  const colorMap = teacherColorMapGlobal;
   // 박스 레이아웃: 교사 이름은 왼쪽(세로 중앙 정렬)에 고정, 가능 시간은 작은 칩(배지)으로 오른쪽에서
   // 아래로 줄바꿈되며 나열 — 시간이 많아도 박스가 옆으로 길어지지 않고 자연스럽게 아래로 쌓이도록.
   let html = '<div class="slot-list">' + display.map(({ mt, slots }) => {
@@ -1707,10 +1746,11 @@ function renderTeacherSlotsHtml(r, opts) {
     const timeChips = slots.map(sl => `<span class="time-chip">${sl.day}${sl.time}${sl.assignedWeek ? `(${sl.assignedWeek[0]})` : ''} ${sl.currentCount}/8</span>`);
 
     let timesHtml;
-    if (collapseTimes && timeChips.length >= 3) {
-      const moreLabel = `▼ 외 ${timeChips.length - 1}개`;
+    if (collapseTimes && timeChips.length >= collapseThreshold) {
+      const shownChips = timeChips.slice(0, collapseShow).join('');
+      const moreLabel = `▼ 외 ${timeChips.length - collapseShow}개`;
       timesHtml = `<div class="time-chip-wrap">
-        <span class="times-short">${timeChips[0]}</span>
+        <span class="times-short">${shownChips}</span>
         <span class="times-full" style="display:none">${timeChips.join('')}</span>
         <button type="button" class="times-toggle-btn" data-more="${moreLabel}" onclick="event.stopPropagation();toggleTimesBox(this)" style="border:none;background:none;cursor:pointer;font-size:10px;color:inherit;text-decoration:underline;padding:0">${moreLabel}</button>
       </div>`;
@@ -1746,10 +1786,11 @@ function toggleTimesBox(btn) {
   }
 }
 
-function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
+function renderMemberTable(lvFilter='', dayFilter='', searchFilter='', productCatFilter='') {
   const filtered = matchResults.filter(r => {
     const m = r.member;
     if (lvFilter && !levelMatchesFilter(m, lvFilter)) return false;
+    if (productCatFilter && memberProductCategory(m) !== productCatFilter) return false;
     if (dayFilter && !m.possibleDays.includes(dayFilter)) return false;
     if (searchFilter) {
       const text = (m.cas + m.name + m.note).toLowerCase();
@@ -1758,8 +1799,13 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
     return true;
   });
 
-  // 매칭 안 된 회원이 맨 위, 그 다음 매칭 가능 교사 수가 적은 순
-  filtered.sort((a, b) => matchedTeacherCount(a) - matchedTeacherCount(b));
+  // 매칭 안 된 회원이 맨 위, 그 다음 매칭 가능 교사 수가 적은 순, 동점자는 레벨 오름차순
+  // (알파벳,파닉스,1,2,3,4,5,80,100,문법 순 — LEVEL_FILTER_OPTIONS 기준, levelGroupKey)
+  filtered.sort((a, b) => {
+    const diff = matchedTeacherCount(a) - matchedTeacherCount(b);
+    if (diff !== 0) return diff;
+    return levelGroupKey(a.member).order - levelGroupKey(b.member).order;
+  });
 
   let html = `<table>
     <thead><tr>
@@ -1772,7 +1818,8 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
 
   filtered.forEach((r, idx) => {
     const m = r.member;
-    const slotsHtml = renderTeacherSlotsHtml(r, { cap: 6 });
+    // 가능 시간이 4개 이상이면 4개까지만 보여주고 화살표(▼ 외 N개)로 나머지를 펼쳐볼 수 있게 함
+    const slotsHtml = renderTeacherSlotsHtml(r, { cap: 6, collapseTimes: true, collapseThreshold: 4, collapseShow: 4 });
 
     // 형제 정보
     const broHtml = getBroHtml(m);
