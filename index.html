@@ -1704,6 +1704,20 @@ function matchedTeacherCount(r) {
   return r.matches.filter(mt => mt.hasSlots).length;
 }
 
+// "이른 시간대(3~5시)" 전용/편중 회원 판별.
+// 회원의 실제 가능 시간(blockedSlots로 막힌 시간 제외)이 이른 시간대(3:00/3:30/4:00/4:30, EARLY_TIMES_SET)와
+// 조금이라도 겹치면 포함 — 딱 "3~5시 전용"이 아니라 "수 4~6시"처럼 이른 시간대를 일부만 포함하는 좁은
+// 가능 시간대의 회원도 모두 포함시켜 달라는 요청 반영. 다만 시간 제한이 전혀 없는(하루 종일 다 가능한)
+// 회원까지 여기로 몰리면 "전용" 취지에서 벗어나므로, 그런 회원은 제외함.
+// 화상코칭거부 회원은 시간과 무관하게 매칭되므로 대상에서 제외.
+function isEarlyOnlyMember(m) {
+  if (m.videoRefused) return false;
+  const blocked = m.blockedSlots || new Set();
+  if (blocked.size === 0) return false; // 시간 제한 없음(전체 시간 가능) → 이른 시간대 전용 아님
+  const availableTimes = TIME_SLOTS.filter(t => !blocked.has(t));
+  return availableTimes.some(t => EARLY_TIMES_SET.has(t));
+}
+
 // 매칭 가능 교사가 여러 명일 때 교사 이름별로 다른 색 상자로 구분해서 보여주기 위한 팔레트
 const TEACHER_COLOR_PALETTE = [
   { bg:'#eff6ff', border:'#93c5fd', text:'#1d4ed8' },
@@ -1821,13 +1835,15 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='', productCa
     return true;
   });
 
-  // 매칭 안 된 회원이 맨 위, 그 다음 매칭 가능 교사 수가 적은 순, 동점자는 레벨 오름차순
-  // (알파벳,파닉스,1,2,3,4,5,80,100,문법 순 — LEVEL_FILTER_OPTIONS 기준, levelGroupKey)
-  filtered.sort((a, b) => {
-    const diff = matchedTeacherCount(a) - matchedTeacherCount(b);
-    if (diff !== 0) return diff;
-    return levelGroupKey(a.member).order - levelGroupKey(b.member).order;
-  });
+  // 화면을 세 그룹으로 순서대로 나눠서 보여줌:
+  // 1) 매칭없음 회원 — 맨 위, "이른 시간대 전용 회원"보다도 위에 별도로 뺌
+  // 2) 일반 회원(매칭 있음 + 이른 시간대 전용은 아님) — 레벨 순(알파벳,파닉스,1,2,3,4,5,80,100,문법)으로 나열
+  // 3) 이른 시간대(3~5시) 전용/편중 회원 — 이 표에서는 제외하고 맨 아래 별도 섹션(renderEarlyMembers)에서만 보여줌(중복 방지)
+  const noMatch = filtered.filter(r => matchedTeacherCount(r) === 0);
+  const normal = filtered.filter(r => matchedTeacherCount(r) > 0 && !isEarlyOnlyMember(r.member));
+  const byLevel = (a, b) => levelGroupKey(a.member).order - levelGroupKey(b.member).order;
+  noMatch.sort(byLevel);
+  normal.sort(byLevel);
 
   let html = `<table>
     <thead><tr>
@@ -1838,21 +1854,20 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='', productCa
     html += `<tr><td colspan="10" class="no-data">해당 조건의 회원이 없습니다.</td></tr>`;
   }
 
-  filtered.forEach((r, idx) => {
+  // 회원 한 명당 표 행(<tr>) HTML을 만드는 헬퍼 (매칭없음/일반 그룹 공통)
+  function memberRowHtml(r, num) {
     const m = r.member;
     // 가능 시간이 4개 이상이면 4개까지만 보여주고 화살표(▼ 외 N개)로 나머지를 펼쳐볼 수 있게 함
     const slotsHtml = renderTeacherSlotsHtml(r, { cap: 6, collapseTimes: true, collapseThreshold: 4, collapseShow: 4 });
-
     // 형제 정보
     const broHtml = getBroHtml(m);
-
     // 학년이 초등6/예비초인 경우 영어교사가 관리교사를 겸함 (안내 배지)
     const mgrBadge = m.engIsAlsoMgr ? '<span class="badge badge-yellow">관리교사겸함</span>' : '';
     // 레벨: "Lv" 표시 없이 숫자 또는 파닉스/알파벳만 (색 없이 일반 텍스트)
     const levelText = m.displayLevel || m.level || '미확인';
 
-    html += `<tr>
-      <td>${idx+1}</td>
+    return `<tr>
+      <td>${num}</td>
       <td><code>${m.cas}</code></td>
       <td style="max-width:110px;font-size:12px">${productSimpleCell(m)}${mgrBadge ? `<br>${mgrBadge}` : ''}</td>
       <td>${levelText}</td>
@@ -1863,24 +1878,45 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='', productCa
       <td style="max-width:240px;font-size:12px">${m.note || '-'}</td>
       <td>${broHtml}</td>
     </tr>`;
-  });
+  }
+  // 그룹 안에서 레벨이 바뀔 때마다 가벼운 구분 행 삽입(임의배정 결과 표와 같은 방식)
+  function groupRowsHtml(group, startNum) {
+    let out = '';
+    let num = startNum;
+    let lastLevelLabel = null;
+    group.forEach(r => {
+      const { label } = levelGroupKey(r.member);
+      if (label !== lastLevelLabel) {
+        out += `<tr><td colspan="10" style="background:var(--gray-light);color:var(--text-muted);font-weight:700;padding:3px 8px;font-size:11px">레벨: ${label}</td></tr>`;
+        lastLevelLabel = label;
+      }
+      out += memberRowHtml(r, num);
+      num++;
+    });
+    return out;
+  }
+
+  let runningNum = 1;
+  if (noMatch.length > 0) {
+    html += `<tr><td colspan="10" style="background:var(--red-light);color:var(--red);font-weight:700;padding:6px 8px">⚠️ 매칭 없음 (${noMatch.length}명)</td></tr>`;
+    html += groupRowsHtml(noMatch, runningNum);
+    runningNum += noMatch.length;
+    if (normal.length > 0) {
+      html += `<tr><td colspan="10" style="background:var(--gray-light);color:var(--text-muted);font-weight:700;padding:6px 8px">📋 배정 대상 회원 (${normal.length}명)</td></tr>`;
+    }
+  }
+  html += groupRowsHtml(normal, runningNum);
 
   html += '</tbody></table>';
   document.getElementById('memberTableWrap').innerHTML = html;
 }
 
 // ========== 이른 시간대(3~5시) 회원 섹션 ==========
+// "매칭없음" 회원은 회원별 보기 표 맨 위 별도 그룹에서 이미 보여주므로(우선순위가 더 높음) 여기서는 제외.
+// 이른 시간대(3~5시)와 조금이라도 겹치는 좁은 가능 시간대 회원은 모두 포함(isEarlyOnlyMember 참고).
 function renderEarlyMembers() {
-  const earlyHours = new Set(['3:00','3:30','4:00','4:30']);
-  const earlyMembers = matchResults.filter(r => {
-    const m = r.member;
-    // 가능일정(AJ) 텍스트에서 3시/4시 포함 여부
-    const txt = m.possibleScheduleRaw || '';
-    const has3or4 = /3시|4시|3:00|4:00|3~|~4/.test(txt) || m.blockedSlots.size >= 4;
-    // 불가 슬롯이 없는 이른 시간이 있는 회원 (5시 이후 전부 불가)
-    const allLateBlocked = ['5:00','5:30','6:00','6:30','7:00','7:30','8:00','8:30'].every(t => m.blockedSlots.has(t));
-    return allLateBlocked;
-  });
+  const earlyMembers = matchResults.filter(r => matchedTeacherCount(r) > 0 && isEarlyOnlyMember(r.member));
+  earlyMembers.sort((a, b) => levelGroupKey(a.member).order - levelGroupKey(b.member).order);
 
   const el = document.getElementById('earlyMembersSection');
   if (!el) return;
