@@ -74,10 +74,15 @@
   .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
   .badge-red { background: var(--red-light); color: var(--red); }
   .badge-gray { background: var(--gray-light); color: var(--gray); border: 1px solid var(--gray-border); }
-  .slot-list { display: flex; flex-direction: column; gap: 4px; }
-  .slot-item { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; background: var(--green-light); border: 1px solid var(--green-border); border-radius: 6px; white-space: nowrap; }
+  .slot-list { display: flex; flex-direction: column; gap: 4px; max-width: 210px; }
+  .slot-item { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; background: var(--green-light); border: 1px solid var(--green-border); border-radius: 6px; }
   .slot-item.warn { background: var(--yellow-light); border-color: var(--yellow-border); }
   .slot-item.full { background: var(--red-light); border-color: var(--red-border); }
+  .slot-item .teacher-name-cell { flex: 0 0 auto; white-space: nowrap; align-self: center; }
+  /* 가능 시간은 교사 이름 오른쪽에서 세로(위→아래)로 나열 */
+  .slot-item .time-chip-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 1 1 auto; min-width: 0; }
+  .slot-item .time-chip-wrap .times-full { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .slot-item .time-chip { white-space: nowrap; font-size: 10px; background: rgba(255,255,255,.65); border-radius: 4px; padding: 1px 5px; align-self: flex-end; }
   .teacher-section { margin-bottom: 24px; }
   .teacher-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .teacher-name { font-size: 15px; font-weight: 700; }
@@ -191,11 +196,18 @@
     <div id="perTeacherTargets" style="display:flex;flex-wrap:wrap;gap:8px"></div>
   </div>
 
+  <!-- 교사별 레벨 제한 설정 (비교 시작 전에도 항상 노출) -->
+  <div class="card">
+    <h2>③ 교사별 레벨 제한 설정 <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(선택사항)</span></h2>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">"이 교사에게는 이 레벨만 배정" 같은 규칙은 아래에서 교사별로 허용할 레벨을 직접 체크해서 지정하세요. 아무것도 체크하지 않은 교사는 기존 방식대로(교사 스케줄러 탭 기준) 제한 없이 매칭됩니다. 체크한 레벨이 있으면 그 레벨의 회원만 해당 교사와 매칭되며, 회원별 보기·교사별 보기·임의 배정 결과에 모두 즉시 반영됩니다.</p>
+    <div id="teacherLevelRestrictWrap"></div>
+  </div>
+
   <!-- 추가 지침 -->
   <div class="card">
-    <h2>③ 추가 지침 입력 <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(선택사항)</span></h2>
-    <textarea id="guidelines" placeholder="예) 80w 상품 회원만 골라주세요 / 교사별 3명씩 고루 배정해주세요 / 특정 교사 제외 등"></textarea>
-    <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">기본 지침 외 추가 조건을 자유롭게 입력하세요. 결과 화면 및 다운로드 엑셀에 함께 표시됩니다.</p>
+    <h2>④ 추가 지침 입력 <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(선택사항, 참고용 메모)</span></h2>
+    <textarea id="guidelines" placeholder="예) 80w 상품 회원만 골라주세요 / 특이사항 메모 등 (교사별 레벨 제한은 위 ③번에서 체크박스로 설정해주세요)"></textarea>
+    <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">이 텍스트는 자동으로 매칭에 반영되지 않고, 결과 화면 및 다운로드 엑셀에 참고용 메모로만 함께 표시됩니다. 매칭 결과 자체를 바꾸는 규칙(예: 교사별 레벨 제한)은 위 ③번 체크박스를 사용하세요.</p>
   </div>
 
   <!-- 실행 버튼 -->
@@ -491,6 +503,7 @@ function checkReady() {
 function resetAll() {
   wb1 = wb2 = null; membersData = []; teachersData = []; matchResults = []; lastRandomAssign = null;
   previewTeacherList = [];
+  teacherLevelRestrictions = {};
   document.getElementById('file1').value = '';
   document.getElementById('file2').value = '';
   ['1','2'].forEach(n => {
@@ -504,6 +517,7 @@ function resetAll() {
   document.getElementById('resultsArea').style.display = 'none';
   document.getElementById('guidelines').value = '';
   renderPerTeacherTargets([]);
+  renderTeacherLevelRestrictions([]);
   document.getElementById('perTeacherStatus').textContent = '② 교사 개별 스케줄러 파일을 업로드한 뒤 [🔍 교사별 회원 수 설정] 버튼을 누르면 교사 이름별로 인원을 지정할 수 있습니다. (비교 시작 전에도 가능)';
   const raEl = document.getElementById('randomAssignResult');
   if (raEl) { raEl.innerHTML = ''; raEl.style.display = 'none'; }
@@ -1116,6 +1130,8 @@ function parseSchedulerFile(wb) {
     // 특정 요일/시간 칸에 이미 배정된 회원의 레벨이 있으면 그 레벨의 신규 회원만 매칭되고,
     // 칸이 비어있으면(레벨 정보 없음) 어떤 레벨의 회원이든 매칭 가능하도록 함.
     const slotLevelSets = {};
+    // 슬롯별로 이미 기록되어 있는 상품(M열) 집합 — 참고용 표시(어떤 상품의 학생들이 그 칸에 있는지)
+    const slotProductSets = {};
     const membersInTab = [];
     const isEng = currentMode === 'eng' || currentMode === 'engJj';
 
@@ -1125,12 +1141,15 @@ function parseSchedulerFile(wb) {
       const cas = safeStr(row[3]); // D열: 회원번호
       if (!cas || isNaN(parseInt(cas))) continue;
 
-      const day = safeStr(row[8]);   // I열: 요일
-      const time = parseTime(row[9]); // J열: 시간
+      // 개별 스케줄러 탭의 요일/시간/레벨(무슨 수업)은 G·H·I열, 상품은 M열에 기록됨.
+      const day = safeStr(row[6]);    // G열: 요일
+      const time = parseTime(row[7]); // H열: 시간
+      const rawProduct = safeStr(row[12]); // M열: 상품
 
-      // 영어=레벨(H열 index7), 일반=학년(G열 index6) — 캘린더 상 "회원 이름 위에 적힌 레벨"
-      const memberLevel = isEng ? safeStr(row[7]) : (() => {
-        const gr = safeStr(row[6]);
+      // 영어/일반 공통으로 I열(무슨 수업=레벨/학년)을 캘린더 상 "회원 이름 위에 적힌 레벨"로 사용.
+      // 일반 모드는 학년 텍스트("초등3" 등)에서 숫자만 추출.
+      const memberLevel = isEng ? safeStr(row[8]) : (() => {
+        const gr = safeStr(row[8]);
         const gm = gr.match(/(\d+)/);
         return gm ? gm[1] : gr;
       })();
@@ -1142,6 +1161,7 @@ function parseSchedulerFile(wb) {
 
         const normLevel = normalizeLevelForMatch(memberLevel);
         if (normLevel) (slotLevelSets[key] = slotLevelSets[key] || new Set()).add(normLevel);
+        if (rawProduct) (slotProductSets[key] = slotProductSets[key] || new Set()).add(rawProduct);
 
         if (isEng) {
           // 그룹영어 한정: 이미 이 방에 들어가 있는 회원이 자주표(자기주도표)인지,
@@ -1190,7 +1210,8 @@ function parseSchedulerFile(wb) {
           const earlyOk = !EARLY_TIMES_SET.has(time) || maxCount > 0;
           const available = (countA < 8 || countB < 8) && earlyOk;
           const slotLevel = [...(slotLevelSets[key] || [])];
-          availableSlots.push({ day, time, count: maxCount, weekly, jajuA, jajuB, countA, countB, available, isEarly: EARLY_TIMES_SET.has(time), slotLevel });
+          const slotProduct = [...(slotProductSets[key] || [])];
+          availableSlots.push({ day, time, count: maxCount, weekly, jajuA, jajuB, countA, countB, available, isEarly: EARLY_TIMES_SET.has(time), slotLevel, slotProduct });
         });
       });
     } else {
@@ -1200,7 +1221,8 @@ function parseSchedulerFile(wb) {
           const cnt = slotCount[key] || 0;
           const earlyOk = !EARLY_TIMES_SET.has(time) || cnt > 0;
           const slotLevel = [...(slotLevelSets[key] || [])];
-          availableSlots.push({ day, time, count: cnt, available: cnt < 8 && earlyOk, isEarly: EARLY_TIMES_SET.has(time), slotLevel });
+          const slotProduct = [...(slotProductSets[key] || [])];
+          availableSlots.push({ day, time, count: cnt, available: cnt < 8 && earlyOk, isEarly: EARLY_TIMES_SET.has(time), slotLevel, slotProduct });
         });
       });
     }
@@ -1226,6 +1248,9 @@ function matchAll(members, teachers) {
     const matches = [];
 
     teachers.forEach(teacher => {
+      // 교사별 레벨 제한(체크박스로 설정한 경우): 허용하지 않은 레벨의 회원은 이 교사와 아예 매칭하지 않음
+      if (!teacherAllowsMemberLevel(teacher.tabName, member)) return;
+
       // 레벨 매칭: 레벨 정보가 없으면 모든 교사 표시
       let levelOk = true;
       if (levelStr && teacher.levels.length > 0) {
@@ -1421,6 +1446,7 @@ function renderResults() {
   document.getElementById('resultsArea').style.display = 'block';
   renderSummary();
   renderPerTeacherTargets();
+  renderTeacherLevelRestrictions();
   renderMemberTable();
   renderEarlyMembers();
   renderTeacherPanels();
@@ -1477,12 +1503,62 @@ function loadTeacherNamesForTargets() {
   }
   previewTeacherList = extractTeacherNamesFromWb(wb2);
   renderPerTeacherTargets();
+  renderTeacherLevelRestrictions();
   if (status) {
     status.textContent = previewTeacherList.length > 0
       ? `✅ 교사 ${previewTeacherList.length}명을 불러왔습니다. 필요한 인원수를 입력하세요.`
       : '⚠️ 스케줄러 파일에서 교사 탭을 찾지 못했습니다.';
     status.style.color = previewTeacherList.length > 0 ? 'var(--green)' : 'var(--red)';
   }
+}
+
+// ========== 교사별 레벨 제한(체크박스) — "이 교사는 이 레벨만" 규칙을 실제 매칭에 반영 ==========
+// tabName -> Set<string>(LEVEL_FILTER_OPTIONS 중 허용 레벨). 비어있거나 없으면 제한 없음(기존 방식).
+let teacherLevelRestrictions = {};
+
+function renderTeacherLevelRestrictions(list) {
+  const wrap = document.getElementById('teacherLevelRestrictWrap');
+  if (!wrap) return;
+  const src = list || (teachersData.length ? teachersData : previewTeacherList);
+  wrap.innerHTML = src.map(t => {
+    const safeTab = String(t.tabName).replace(/"/g, '&quot;');
+    const restriction = teacherLevelRestrictions[t.tabName];
+    const chips = LEVEL_FILTER_OPTIONS.map(opt => {
+      const checked = restriction && restriction.has(opt) ? 'checked' : '';
+      return `<label class="pcheck" style="font-size:11px;padding:2px 8px"><input type="checkbox" value="${opt}" data-tab="${safeTab}" onchange="toggleTeacherLevelRestriction(this)" ${checked}> ${opt}</label>`;
+    }).join('');
+    return `<div style="border:1px solid var(--blue-border);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:#fff">
+      <div style="font-size:12px;font-weight:700;color:var(--orange-dark);margin-bottom:4px">👩‍🏫 ${t.teacherName}${restriction && restriction.size ? ` <span class="badge badge-blue">${[...restriction].join(',')}만</span>` : ''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${chips}</div>
+    </div>`;
+  }).join('') || '<span style="color:var(--text-muted);font-size:12px">아직 교사 정보가 없습니다. ② 스케줄러 파일을 업로드하고 [🔍 교사별 회원 수 설정] 버튼을 누르거나, 비교 시작을 실행하세요.</span>';
+}
+
+function toggleTeacherLevelRestriction(el) {
+  const tab = el.dataset.tab;
+  if (!teacherLevelRestrictions[tab]) teacherLevelRestrictions[tab] = new Set();
+  if (el.checked) teacherLevelRestrictions[tab].add(el.value);
+  else teacherLevelRestrictions[tab].delete(el.value);
+  if (teacherLevelRestrictions[tab].size === 0) delete teacherLevelRestrictions[tab];
+  renderTeacherLevelRestrictions(); // 배지(허용 레벨 요약) 갱신
+  reapplyMatchingIfReady();
+}
+
+// 이미 비교(matchAll)를 실행한 상태라면, 제한 규칙이 바뀔 때마다 즉시 다시 매칭해서
+// 회원별 보기/교사별 보기/임의 배정 결과에 바로 반영되도록 함.
+function reapplyMatchingIfReady() {
+  if (membersData.length > 0 && teachersData.length > 0) {
+    matchResults = matchAll(membersData, teachersData);
+    renderResults();
+  }
+}
+
+// 특정 교사(tabName)가 이 회원의 레벨을 받을 수 있는지: 제한이 없으면 항상 true,
+// 제한이 있으면 그 중 하나라도 이 회원의 레벨과 일치해야 true (levelMatchesFilter 재사용).
+function teacherAllowsMemberLevel(tabName, member) {
+  const restriction = teacherLevelRestrictions[tabName];
+  if (!restriction || restriction.size === 0) return true;
+  return [...restriction].some(opt => levelMatchesFilter(member, opt));
 }
 
 // 교사 tabName → 설정된 임의 배정 목표 인원(비어있으면 무제한=Infinity)
@@ -1535,7 +1611,7 @@ function toggleNoMatchList() {
 }
 
 // 레벨 필터 고정 목록 (실제 데이터에 없는 값도 항상 노출)
-const LEVEL_FILTER_OPTIONS = ['알파벳','파닉스','1','2','3','4','5','80','100','베문법'];
+const LEVEL_FILTER_OPTIONS = ['알파벳','파닉스','1','2','3','4','5','80','100','문법'];
 function populateLevelFilter() {
   const sel = document.getElementById('filterLevel');
   sel.innerHTML = '<option value="">전체</option>' + LEVEL_FILTER_OPTIONS.map(o => `<option value="${o}">${o}</option>`).join('');
@@ -1548,8 +1624,17 @@ function levelMatchesFilter(m, filter) {
   if (filter === '알파벳') return disp === '알파벳';
   if (filter === '파닉스') return lvl === '파닉스' && disp !== '알파벳';
   // 실제 데이터의 정확한 표기(예: "베이직문법" 등)를 몰라도 걸리도록 "문법" 포함 여부로 느슨하게 매칭
-  if (filter === '베문법') return /문법/.test(lvl) || /문법/.test(disp);
+  if (filter === '문법') return /문법/.test(lvl) || /문법/.test(disp);
   return lvl === filter || lvl === filter + 'W' || disp === filter || disp === filter + 'W';
+}
+
+// 회원의 레벨을 LEVEL_FILTER_OPTIONS 순서에 맞춰 정렬 키(문자열)로 변환 — 임의배정 결과를 "레벨 순으로 묶어서" 보여줄 때 사용.
+// LEVEL_FILTER_OPTIONS에 없는 값(레벨 정보 없음/특이 표기)은 맨 뒤로 밀림.
+function levelGroupKey(m) {
+  const disp = String(m.displayLevel || m.level || '').trim();
+  const idx = LEVEL_FILTER_OPTIONS.findIndex(opt => levelMatchesFilter(m, opt));
+  const order = idx === -1 ? LEVEL_FILTER_OPTIONS.length : idx;
+  return { order, label: disp || '레벨 정보 없음' };
 }
 
 function applyFilters() {
@@ -1613,27 +1698,29 @@ function renderTeacherSlotsHtml(r, opts) {
 
   const display = cap ? grouped.slice(0, cap) : grouped;
   const colorMap = new Map();
+  // 박스 레이아웃: 교사 이름은 왼쪽(세로 중앙 정렬)에 고정, 가능 시간은 작은 칩(배지)으로 오른쪽에서
+  // 아래로 줄바꿈되며 나열 — 시간이 많아도 박스가 옆으로 길어지지 않고 자연스럽게 아래로 쌓이도록.
   let html = '<div class="slot-list">' + display.map(({ mt, slots }) => {
     const c = teacherColorStyle(mt.teacher.teacherName, colorMap);
     const warn = slots.some(s => s.currentCount >= 7);
     const style = `background:${c.bg};border:${warn ? '2px' : '1px'} solid ${c.border};color:${c.text};` + (warn ? 'box-shadow:0 0 0 1px var(--yellow);' : '');
-    const timesTexts = slots.map(sl => `${sl.day}${sl.time}${sl.assignedWeek ? `(${sl.assignedWeek[0]})` : ''} ${sl.currentCount}/8명`);
+    const timeChips = slots.map(sl => `<span class="time-chip">${sl.day}${sl.time}${sl.assignedWeek ? `(${sl.assignedWeek[0]})` : ''} ${sl.currentCount}/8</span>`);
 
     let timesHtml;
-    if (collapseTimes && timesTexts.length >= 3) {
-      const moreLabel = `▼ 외 ${timesTexts.length - 1}개`;
-      timesHtml = `<div style="font-size:11px">
-        <span class="times-short">${timesTexts[0]}</span>
-        <span class="times-full" style="display:none">${timesTexts.join(' / ')}</span>
-        <button type="button" class="times-toggle-btn" data-more="${moreLabel}" onclick="event.stopPropagation();toggleTimesBox(this)" style="border:none;background:none;cursor:pointer;font-size:11px;color:inherit;text-decoration:underline;padding:0;margin-left:4px">${moreLabel}</button>
+    if (collapseTimes && timeChips.length >= 3) {
+      const moreLabel = `▼ 외 ${timeChips.length - 1}개`;
+      timesHtml = `<div class="time-chip-wrap">
+        <span class="times-short">${timeChips[0]}</span>
+        <span class="times-full" style="display:none">${timeChips.join('')}</span>
+        <button type="button" class="times-toggle-btn" data-more="${moreLabel}" onclick="event.stopPropagation();toggleTimesBox(this)" style="border:none;background:none;cursor:pointer;font-size:10px;color:inherit;text-decoration:underline;padding:0">${moreLabel}</button>
       </div>`;
     } else {
-      timesHtml = `<div style="font-size:11px">${timesTexts.join(' / ')}</div>`;
+      timesHtml = `<div class="time-chip-wrap">${timeChips.join('')}</div>`;
     }
 
     const clickHandler = clickable ? ` onclick="openAssignPickerModal('${jsStr(r.member.cas)}','${jsStr(mt.teacher.tabName)}')" style="${style};cursor:pointer"` : ` style="${style}"`;
     return `<div class="slot-item"${clickHandler}>
-      <strong>${mt.teacher.teacherName}${clickable ? ' 📅' : ''}</strong>
+      <strong class="teacher-name-cell">${mt.teacher.teacherName}${clickable ? ' 📅' : ''}</strong>
       ${timesHtml}
     </div>`;
   }).join('');
@@ -1701,7 +1788,7 @@ function renderMemberTable(lvFilter='', dayFilter='', searchFilter='') {
       <td style="max-width:110px;font-size:12px">${productSimpleCell(m)}${mgrBadge ? `<br>${mgrBadge}` : ''}</td>
       <td>${levelText}</td>
       <td>${gradeDisplay(m.grade)}</td>
-      <td style="min-width:200px">${slotsHtml}</td>
+      <td style="width:210px;max-width:210px">${slotsHtml}</td>
       <td style="max-width:180px;font-size:12px">${m.possibleScheduleRaw || '<span style="color:var(--text-muted)">-</span>'}</td>
       <td style="max-width:280px;font-size:12px;white-space:pre-line">${m.unavailDisplay || '-'}</td>
       <td style="max-width:240px;font-size:12px">${m.note || '-'}</td>
@@ -1763,18 +1850,26 @@ function slotLevelText(sl) {
   const lv = sl && sl.slotLevel;
   return (lv && lv.length) ? lv.join(',') : '레벨무관';
 }
-// 회원에게 실제로 열려있는(빨간) 슬롯의 표시 텍스트. 예: "2(A) 1/8" / "파닉스 3/8"
+// 슬롯(요일-시간 칸)에 실제로 기록되어 있는 상품(M열) 표시 텍스트. 기록이 없으면 빈 문자열(표시 안 함).
+function slotProductText(sl) {
+  const p = sl && sl.slotProduct;
+  return (p && p.length) ? p.join(', ') : '';
+}
+// 회원에게 실제로 열려있는(빨간) 슬롯의 표시 텍스트. 예: "2(A) 1/8" / "파닉스 3/8" (+ 상품 정보가 있으면 아래에 작게 함께 표시)
 function matchSlotLabel(sl) {
   const lv = slotLevelText(sl);
-  if (sl.assignedWeek) return `${lv}(${sl.assignedWeek[0]}) ${sl.currentCount}/8`;
-  return `${lv} ${sl.currentCount}/8`;
+  const main = sl.assignedWeek ? `${lv}(${sl.assignedWeek[0]}) ${sl.currentCount}/8` : `${lv} ${sl.currentCount}/8`;
+  const prod = slotProductText(sl);
+  return prod ? `${main}<div style="font-size:9px;font-weight:400;opacity:.75">${prod}</div>` : main;
 }
 // 회원 기준으로는 열려있지 않은(회색) 슬롯이라도, 교사 방 자체의 현재 인원을 참고용으로 표시
 function teacherSlotLabel(slot) {
   if (!slot) return '-';
   const lv = slotLevelText(slot);
-  if (slot.countA !== undefined) return `${lv}(A) ${slot.countA}/8 · ${lv}(B) ${slot.countB}/8`;
-  return `${lv} ${slot.count}/8`;
+  const prod = slotProductText(slot);
+  const prodHtml = prod ? `<div style="font-size:9px;opacity:.75">${prod}</div>` : '';
+  if (slot.countA !== undefined) return `${lv}(A) ${slot.countA}/8 · ${lv}(B) ${slot.countB}/8${prodHtml}`;
+  return `${lv} ${slot.count}/8${prodHtml}`;
 }
 // 요일→시간 순으로 가장 이른 매칭 슬롯의 day-time 키를 찾음 (⭐ 최우선 추천용)
 function findEarliestSlotKey(availableSlots) {
@@ -2015,12 +2110,20 @@ function renderRandomAssignResultUI() {
   html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">🔶 표시는 마감임박(7/8) 자리를 채우는 우선 배정 회원입니다. "배정시간"은 매칭된 시간 중 가장 이른 시간으로 자동 선택되었습니다. <span class="badge badge-red">굵은 빨간 테두리</span>는 추가 배정 가능 회원 목록에서 직접 추가한 회원입니다.</div>`;
   Object.values(perTeacher).forEach(({ teacher, picked }) => {
     if (picked.length === 0) return;
+    // 레벨 순으로 묶어서 표시: LEVEL_FILTER_OPTIONS 순서 기준으로 정렬하고, 레벨이 바뀔 때마다 구분 행 삽입
+    const sortedPicked = picked.slice().sort((a, b) => levelGroupKey(a.member).order - levelGroupKey(b.member).order);
     html += `<div class='random-teacher-block'>`
       + `<div class='random-teacher-name'>👩‍🏫 ${teacher.teacherName} — ${picked.length}명 배정</div>`
       + '<div style="overflow-x:auto"><table style="font-size:12px;width:auto">'
       + `<thead><tr><th>#</th><th>CAS회원번호</th><th>레벨</th><th>수업주차</th><th>코칭구분</th><th>배정시간</th><th>가능일자</th><th>그 외 가능시간</th><th>특이사항</th></tr></thead><tbody>`;
-    picked.forEach((r, i) => {
+    let lastLevelLabel = null;
+    sortedPicked.forEach((r, i) => {
       const m = r.member;
+      const { label: levelGroupLabel } = levelGroupKey(m);
+      if (levelGroupLabel !== lastLevelLabel) {
+        html += `<tr><td colspan="9" style="background:var(--gray-light);color:var(--text-muted);font-weight:700;padding:4px 8px">레벨: ${levelGroupLabel}</td></tr>`;
+        lastLevelLabel = levelGroupLabel;
+      }
       const mt = r.matches.find(mt2 => mt2.teacher.tabName === teacher.tabName && mt2.hasSlots);
       const assignedSlot = r._assignedSlot;
       const cycleText = currentMode === 'genN'
@@ -2059,7 +2162,7 @@ function renderRandomAssignResultUI() {
         + `<td style="width:60px">${m.displayLevel || m.level || '-'}</td>`
         + `<td style="white-space:nowrap;font-size:12px">${firstWeekCell(m)}</td>`
         + `<td style="max-width:150px;font-size:12px">${m.possibleScheduleRaw||'-'}</td>`
-        + `<td style="min-width:200px">${renderTeacherSlotsHtml(r, { cap: 0, collapseTimes: true, clickable: true })}</td>`
+        + `<td style="width:210px;max-width:210px">${renderTeacherSlotsHtml(r, { cap: 0, collapseTimes: true, clickable: true })}</td>`
         + `<td style="max-width:220px;font-size:12px">${m.note||'-'}</td></tr>`;
     });
     html += '</tbody></table></div>';
